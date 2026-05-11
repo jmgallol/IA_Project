@@ -1,141 +1,86 @@
-# ========================================
-# ui/sidebar.py
-# Componentes del panel lateral de Streamlit
-# ========================================
+from datetime import datetime
 
 import streamlit as st
-from datetime import datetime, timedelta
+
 from config.settings import (
-    DEFAULT_TICKERS, 
-    DATE_START, 
-    DATE_END,
     CAPITAL_INICIAL_DEFAULT,
+    CAPITAL_INICIAL_MAX,
     CAPITAL_INICIAL_MIN,
-    CAPITAL_INICIAL_MAX
+    DATE_END,
+    DATE_START,
+    DEFAULT_TICKERS,
 )
 
 
 def render_sidebar():
     """
-    Renderiza el panel lateral con todos los controles de entrada.
-    
-    Returns:
-        dict: Diccionario con la configuración del usuario:
-        {
-            'ticker': str,
-            'fecha_inicio': str,
-            'fecha_fin': str,
-            'estrategia': str,
-            'capital': float,
-            'optimizar': bool,
-            'ejecutar': bool
-        }
+    Renderiza el panel lateral y retorna la configuracion seleccionada.
+
+    El codigo usa nombres en ingles, pero los textos visibles quedan en espanol
+    para facilitar la presentacion academica.
     """
-    
     with st.sidebar:
-        st.title("⚙️ Configuración")
+        st.title("Configuracion")
         st.divider()
-        
-        # Selección de ticker
+
         st.subheader("Activo")
         ticker = st.selectbox(
-            "Selecciona un ticker:",
+            "Selecciona un ticker",
             DEFAULT_TICKERS,
-            help="Elige el activo a analizar. Ejemplos: AAPL, BTC-USD, SPY"
+            help="Ejemplos: AAPL, MSFT, BTC-USD, ETH-USD.",
         )
-        
-        # O permite entrada personalizada
-        ticker_custom = st.text_input(
-            "O ingresa un ticker personalizado:",
+
+        custom_ticker = st.text_input(
+            "Ticker personalizado",
             value="",
-            placeholder="Ej: NVDA, TSLA, ETH-USD",
-            help="Deja en blanco para usar la selección anterior"
-        )
-        
-        if ticker_custom:
-            ticker = ticker_custom.upper()
-        
+            placeholder="Ej: NVDA, TSLA, SOL-USD",
+        ).strip()
+
+        if custom_ticker:
+            ticker = custom_ticker.upper()
+
         st.divider()
-        
-        # Rango de fechas
-        st.subheader("Período de análisis")
-        
-        # Conversión de strings a datetime
-        default_start = datetime.strptime(DATE_START, '%Y-%m-%d')
-        default_end = datetime.strptime(DATE_END, '%Y-%m-%d')
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            fecha_inicio = st.date_input(
-                "Fecha inicio:",
-                value=default_start,
-                help="Primera fecha del período de análisis"
-            )
-        
-        with col2:
-            fecha_fin = st.date_input(
-                "Fecha fin:",
-                value=default_end,
-                help="Última fecha del período de análisis"
-            )
-        
+
+        st.subheader("Periodo de analisis")
+        default_start = datetime.strptime(DATE_START, "%Y-%m-%d")
+        default_end = datetime.strptime(DATE_END, "%Y-%m-%d")
+
+        start_date = st.date_input("Fecha inicial", value=default_start)
+        end_date = st.date_input("Fecha final", value=default_end)
+
         st.divider()
-        
-        # Selección de estrategia
-        st.subheader("Estrategia de trading")
-        estrategia = st.selectbox(
-            "Elige una estrategia:",
+
+        st.subheader("Estrategia")
+        strategy = st.selectbox(
+            "Elige una estrategia",
             ["RSI Strategy", "SMA Crossover", "MACD Strategy"],
-            help="Selecciona el algoritmo de trading a usar"
         )
-        
+
         st.divider()
-        
-        # Capital inicial
-        st.subheader("Capital inicial")
-        capital = st.slider(
-            "Monto inicial (USD):",
+
+        st.subheader("Capital")
+        cash = st.slider(
+            "Capital inicial USD",
             min_value=CAPITAL_INICIAL_MIN,
             max_value=CAPITAL_INICIAL_MAX,
             value=CAPITAL_INICIAL_DEFAULT,
             step=1000,
-            help="Capital disponible para operar"
         )
-        
+
         st.divider()
-        
-        # Optimización
-        st.subheader("Optimización de parámetros")
-        optimizar = st.checkbox(
-            "Activar optimización automática",
-            value=False,
-            help="Busca automáticamente los mejores parámetros (puede tomar tiempo)"
-        )
-        
-        if optimizar:
-            st.info("⏳ La optimización ejecutará múltiples backtests. Esto puede tomar algunos minutos.")
-        
-        st.divider()
-        
-        # Botón de ejecución
-        ejecutar = st.button(
-            "🚀 Ejecutar análisis",
-            use_container_width=True,
-            type="primary"
-        )
-        
-        st.divider()
-        st.caption("Trading Bot v1.0 | Desarrollado con Streamlit y backtesting.py")
-    
-    # Convertir fechas a strings en formato YYYY-MM-DD
-    config = {
-        'ticker': ticker,
-        'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d'),
-        'fecha_fin': fecha_fin.strftime('%Y-%m-%d'),
-        'estrategia': estrategia,
-        'capital': capital,
-        'optimizar': optimizar,
-        'ejecutar': ejecutar
+
+        optimize = st.checkbox("Optimizar parametros", value=False)
+        if optimize:
+            st.info("La optimizacion ejecuta multiples backtests y puede tardar.")
+
+        run_analysis = st.button("Ejecutar analisis", use_container_width=True, type="primary")
+
+    return {
+        "ticker": ticker,
+        "fecha_inicio": start_date.strftime("%Y-%m-%d"),
+        "fecha_fin": end_date.strftime("%Y-%m-%d"),
+        "estrategia": strategy,
+        "capital": cash,
+        "optimizar": optimize,
+        "ejecutar": run_analysis,
     }
-    
-    return config

@@ -171,8 +171,9 @@ def plot_equity_curve(stats):
         plotly.graph_objects.Figure: Figura interactiva
     """
     
-    # Obtener la serie de capital durante el tiempo
-    equity = stats._equity_curve
+    # Obtener la serie de capital durante el tiempo.
+    equity_curve = stats._equity_curve
+    equity = equity_curve["Equity"] if "Equity" in equity_curve.columns else equity_curve.iloc[:, 0]
     
     # Determinar color según el retorno final
     retorno_total = stats['Return [%]']
@@ -184,7 +185,7 @@ def plot_equity_curve(stats):
     fig.add_trace(
         go.Scatter(
             x=equity.index,
-            y=equity.values,
+            y=equity,
             fill='tozeroy',
             fillcolor=color_relleno,
             line=dict(color=COLORS['equity'], width=2),
@@ -247,15 +248,19 @@ def plot_trades(df, stats):
         exit_times = []
         exit_prices = []
         
-        for trade in trades:
-            # Entry
-            entry_times.append(df.index[int(trade.entry_time)])
-            entry_prices.append(trade.entry_price)
-            
-            # Exit
-            if trade.exit_time is not None:
-                exit_times.append(df.index[int(trade.exit_time)])
-                exit_prices.append(trade.exit_price)
+        for _, trade in trades.iterrows():
+            entry_bar = int(trade["EntryBar"])
+            exit_bar = trade["ExitBar"]
+
+            if 0 <= entry_bar < len(df):
+                entry_times.append(df.index[entry_bar])
+                entry_prices.append(trade["EntryPrice"])
+
+            if pd.notna(exit_bar):
+                exit_bar = int(exit_bar)
+                if 0 <= exit_bar < len(df):
+                    exit_times.append(df.index[exit_bar])
+                    exit_prices.append(trade["ExitPrice"])
         
         # Agregar marcadores de entrada
         if entry_times:
