@@ -24,26 +24,41 @@ def render_metrics(stats_base, stats_opt=None):
 def _render_single_stats(stats, stats_base=None, compact=False):
     columns = st.columns(2 if compact else 3)
     metrics = [
-        ("Retorno total", "Return [%]", "%"),
-        ("Sharpe Ratio", "Sharpe Ratio", ""),
-        ("Drawdown maximo", "Max. Drawdown [%]", "%"),
-        ("Win rate", "Win Rate [%]", "%"),
-        ("Operaciones", "# Trades", ""),
-        ("Factor ganancias", "Profit Factor", ""),
-        ("Exposicion", "Exposure Time [%]", "%"),
-        ("Retorno anual", "Annual Return [%]", "%"),
+        ("Retorno total", ("Return [%]",), "%"),
+        ("Sharpe Ratio", ("Sharpe Ratio",), ""),
+        ("Drawdown maximo", ("Max. Drawdown [%]",), "%"),
+        ("Win rate", ("Win Rate [%]",), "%"),
+        ("Operaciones", ("# Trades",), ""),
+        ("Factor ganancias", ("Profit Factor",), ""),
+        ("Exposicion", ("Exposure Time [%]",), "%"),
+        ("Retorno anual", ("Return (Ann.) [%]", "Annual Return [%]"), "%"),
     ]
 
-    for index, (label, key, suffix) in enumerate(metrics):
+    for index, (label, keys, suffix) in enumerate(metrics):
+        key = _find_metric_key(stats, keys)
+        if key is None:
+            continue
+
         value = stats[key]
         delta = None
 
         if stats_base is not None:
-            delta_value = value - stats_base[key]
+            base_key = _find_metric_key(stats_base, keys)
+            if base_key is None:
+                continue
+            delta_value = value - stats_base[base_key]
             delta = f"{delta_value:.2f}{suffix}" if key != "# Trades" else f"{int(delta_value)}"
 
         formatted = f"{int(value)}" if key == "# Trades" else f"{value:.2f}{suffix}"
         columns[index % len(columns)].metric(label, formatted, delta=delta)
+
+
+def _find_metric_key(stats, keys):
+    """Retorna la primera clave disponible para una metrica."""
+    for key in keys:
+        if key in stats.index:
+            return key
+    return None
 
 
 def render_best_params(params):
