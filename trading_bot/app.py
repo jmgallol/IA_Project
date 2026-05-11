@@ -1,4 +1,6 @@
 import streamlit as st
+import numpy as np
+import pandas as pd
 
 from backtest.engine import run_backtest
 from backtest.optimizer import run_optimization
@@ -39,6 +41,36 @@ def load_market_data(ticker, start_date, end_date):
     return add_indicators(raw_data)
 
 
+@st.cache_data(show_spinner=False)
+def load_demo_data(ticker, start_date, end_date):
+    """Genera una serie OHLCV deterministica para probar la app sin internet."""
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")
+    if len(dates) < 80:
+        raise DataNotFoundError("El modo demostracion necesita al menos 80 dias habiles.")
+
+    seed = sum(ord(character) for character in ticker)
+    rng = np.random.default_rng(seed)
+    returns = rng.normal(loc=0.0006, scale=0.018, size=len(dates))
+    trend = np.linspace(0, 0.35, len(dates))
+    close = 100 * np.exp(np.cumsum(returns) + trend)
+    open_price = close * (1 + rng.normal(0, 0.004, len(dates)))
+    high = np.maximum(open_price, close) * (1 + rng.uniform(0.001, 0.018, len(dates)))
+    low = np.minimum(open_price, close) * (1 - rng.uniform(0.001, 0.018, len(dates)))
+    volume = rng.integers(800_000, 6_000_000, size=len(dates))
+
+    data = pd.DataFrame(
+        {
+            "Open": open_price,
+            "High": high,
+            "Low": low,
+            "Close": close,
+            "Volume": volume,
+        },
+        index=dates,
+    )
+    return add_indicators(data)
+
+
 def main():
     st.set_page_config(layout="wide", page_title="Trading Bot")
     st.title("Trading Bot - Backtesting y optimizacion")
@@ -60,11 +92,19 @@ def main():
 
     try:
         with st.spinner("Descargando datos y calculando indicadores..."):
-            data = load_market_data(
-                config["ticker"],
-                config["fecha_inicio"],
-                config["fecha_fin"],
-            )
+            if config["modo_demo"]:
+                data = load_demo_data(
+                    config["ticker"],
+                    config["fecha_inicio"],
+                    config["fecha_fin"],
+                )
+                st.warning("Estas usando datos de demostracion, no precios reales de mercado.")
+            else:
+                data = load_market_data(
+                    config["ticker"],
+                    config["fecha_inicio"],
+                    config["fecha_fin"],
+                )
 
         if data.empty:
             st.error("No quedaron datos validos despues de calcular indicadores.")

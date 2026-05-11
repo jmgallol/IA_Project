@@ -22,7 +22,14 @@ def download_data(ticker, start, end):
         DataFrame con columnas Open, High, Low, Close y Volume.
     """
     try:
-        data = yf.download(ticker, start=start, end=end, progress=False)
+        data = yf.download(
+            ticker,
+            start=start,
+            end=end,
+            progress=False,
+            threads=False,
+            timeout=15,
+        )
         data = _normalize_columns(data)
         data = _validate_data(data, ticker, start, end)
         return data
@@ -31,7 +38,7 @@ def download_data(ticker, start, end):
     except Exception as error:
         raise DataNotFoundError(
             f"Error al descargar datos para {ticker}: {error}. "
-            "Verifica que el ticker exista en Yahoo Finance."
+            "Verifica la conexion a Yahoo Finance o usa el modo demostracion."
         ) from error
 
 

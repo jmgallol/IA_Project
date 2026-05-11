@@ -73,6 +73,12 @@ def render_sidebar():
         if optimize:
             st.info("La optimizacion ejecuta multiples backtests y puede tardar.")
 
+        demo_mode = st.checkbox(
+            "Usar datos de demostracion",
+            value=False,
+            help="Permite probar la app cuando Yahoo Finance no responde.",
+        )
+
         run_analysis = st.button("Ejecutar analisis", use_container_width=True, type="primary")
 
     return {
@@ -82,5 +88,6 @@ def render_sidebar():
         "estrategia": strategy,
         "capital": cash,
         "optimizar": optimize,
+        "modo_demo": demo_mode,
         "ejecutar": run_analysis,
     }
