@@ -1,0 +1,130 @@
+================================================================================
+GUÍA RÁPIDA DE INSTALACIÓN Y EJECUCIÓN - TRADING BOT
+================================================================================
+
+📋 PRERREQUISITOS:
+- Python 3.8 o superior instalado
+- pip (gestor de paquetes de Python)
+
+🚀 PASOS DE INSTALACIÓN (Windows):
+
+1. Abre Command Prompt (CMD) o PowerShell en la carpeta del proyecto
+
+2. Crea un entorno virtual:
+   python -m venv venv
+
+3. Activa el entorno virtual:
+   venv\Scripts\activate
+
+   (Deberías ver "(venv)" al inicio de la línea de comando)
+
+4. Instala las dependencias:
+   pip install -r requirements.txt
+
+   (Esto descargará e instalará todas las librerías necesarias)
+
+5. Ejecuta la aplicación:
+   streamlit run app.py
+
+   (Se abrirá automáticamente en tu navegador: http://localhost:8501)
+
+================================================================================
+
+🐧 PASOS DE INSTALACIÓN (macOS/Linux):
+
+1. Abre Terminal en la carpeta del proyecto
+
+2. Crea un entorno virtual:
+   python3 -m venv venv
+
+3. Activa el entorno virtual:
+   source venv/bin/activate
+
+   (Deberías ver "(venv)" al inicio de la línea de comando)
+
+4. Instala las dependencias:
+   pip install -r requirements.txt
+
+5. Ejecuta la aplicación:
+   streamlit run app.py
+
+================================================================================
+
+✅ VERIFICACIÓN:
+
+Si todo está correctamente instalado, deberías ver:
+- Se abrirá automáticamente tu navegador
+- La interfaz de Trading Bot con el panel lateral en la izquierda
+- Un mensaje "👈 Configura los parámetros en el panel lateral..."
+
+================================================================================
+
+⚠️ POSIBLES PROBLEMAS:
+
+❌ Problema: "Python no es reconocido"
+✓ Solución: Instala Python desde https://www.python.org/downloads/
+           Asegúrate de marcar "Add Python to PATH" durante la instalación
+
+❌ Problema: "No module named 'streamlit'"
+✓ Solución: Verifica que el entorno virtual está activado (debes ver "(venv)")
+           Ejecuta: pip install -r requirements.txt
+
+❌ Problema: Puerto 8501 en uso
+✓ Solución: Ejecuta: streamlit run app.py --server.port 8502
+
+❌ Problema: "yfinance" no descarga datos
+✓ Solución: Verifica tu conexión a internet
+           Intenta con otro ticker (ej: AAPL en lugar de un ticker inválido)
+
+================================================================================
+
+📖 PRIMER USO:
+
+1. En el panel izquierdo, selecciona un ticker (ej: AAPL, BTC-USD)
+2. Mantén las fechas por defecto o personalízalas
+3. Elige una estrategia (RSI, SMA o MACD)
+4. Establece un capital inicial (default: $10,000)
+5. Presiona "🚀 Ejecutar análisis"
+6. Espera a que se descarguen los datos y se ejecute el backtesting
+7. Verás los resultados en tres tabs: Datos, Backtesting y Optimización
+
+================================================================================
+
+🔍 ESTRUCTURA DEL PROYECTO:
+
+trading_bot/
+├── app.py                          ← Archivo principal (punto de entrada)
+├── config/settings.py              ← Configuración global
+├── data/loader.py                  ← Descarga de datos
+├── indicators/technical.py         ← Indicadores técnicos
+├── strategies/                     ← Las 3 estrategias
+├── backtest/                       ← Motor de backtesting y optimización
+├── ui/                            ← Interfaz Streamlit
+├── requirements.txt                ← Dependencias
+└── README.md                       ← Documentación completa
+
+================================================================================
+
+💡 CONSEJOS:
+
+• Comienza con un rango de fechas corto (últimos 3 meses) para backtests rápidos
+• Prueba con AAPL o SPY si no estás seguro del ticker
+• Activa la optimización solo después de entender cómo funcionan las estrategias
+• Observa los gráficos interactivos (puedes hacer zoom y pan)
+• Compara las métricas de diferentes estrategias
+
+================================================================================
+
+📞 AYUDA:
+
+Si encuentras errores específicos, cópialos completos y búscalos en:
+- Google
+- Stack Overflow
+- Documentación oficial de las librerías:
+  • https://docs.streamlit.io/
+  • https://yfinance.readthedocs.io/
+  • https://github.com/kernc/backtesting.py
+
+================================================================================
+
+¡Disfruta usando Trading Bot! 📈
