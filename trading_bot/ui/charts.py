@@ -236,6 +236,9 @@ def plot_trades(df, stats):
         )
     )
     
+    price_scale = stats.attrs.get("price_scale", 1.0)
+    price_multiplier = 1 / price_scale if price_scale else 1.0
+
     # Extraer puntos de entrada y salida de las operaciones
     trades = stats._trades
     
@@ -254,13 +257,13 @@ def plot_trades(df, stats):
 
             if 0 <= entry_bar < len(df):
                 entry_times.append(df.index[entry_bar])
-                entry_prices.append(trade["EntryPrice"])
+                entry_prices.append(trade["EntryPrice"] * price_multiplier)
 
             if pd.notna(exit_bar):
                 exit_bar = int(exit_bar)
                 if 0 <= exit_bar < len(df):
                     exit_times.append(df.index[exit_bar])
-                    exit_prices.append(trade["ExitPrice"])
+                    exit_prices.append(trade["ExitPrice"] * price_multiplier)
         
         # Agregar marcadores de entrada
         if entry_times:
