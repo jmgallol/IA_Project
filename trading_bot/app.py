@@ -1,3 +1,5 @@
+import logging
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -13,6 +15,9 @@ from strategies.sma_strategy import SMAStrategy
 from ui.charts import plot_candlestick, plot_equity_curve, plot_trades
 from ui.metrics import render_best_params, render_metrics, render_optimization_results
 from ui.sidebar import render_sidebar
+
+
+logger = logging.getLogger(__name__)
 
 
 STRATEGIES = {
@@ -153,9 +158,22 @@ def main():
         )
 
     except DataNotFoundError as error:
-        st.error(str(error))
-    except Exception as error:
-        st.exception(error)
+        logger.warning("No fue posible cargar datos: %s", error)
+        show_user_error(str(error))
+    except ValueError as error:
+        logger.exception("Error de validacion durante el analisis")
+        show_user_error(str(error))
+    except Exception:
+        logger.exception("Error inesperado durante el analisis")
+        show_user_error(
+            "Ocurrio un error inesperado al ejecutar el analisis. "
+            "Revisa la terminal para ver el detalle tecnico."
+        )
+
+
+def show_user_error(message):
+    """Muestra errores limpios al usuario sin exponer trazas tecnicas."""
+    st.error(f"Error: {message}")
 
 
 def render_results(
