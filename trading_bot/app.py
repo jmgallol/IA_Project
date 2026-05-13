@@ -100,6 +100,15 @@ def main():
     render_chatbot(stats=stats_for_bot, ticker=config["ticker"])
 
     if not config["ejecutar"]:
+        last_results = st.session_state.get("last_results")
+        if last_results is not None:
+            st.info(
+                "Mostrando el ultimo analisis ejecutado. "
+                "Presiona 'Ejecutar analisis' para actualizarlo con la configuracion actual."
+            )
+            render_results(**last_results)
+            return
+
         st.info("Configura el activo, periodo y estrategia en el panel lateral para iniciar.")
         return
 
@@ -155,16 +164,18 @@ def main():
 
         buy_hold_stats = calculate_buy_hold(data, cash=config["capital"])
 
-        render_results(
-            data=data,
-            ticker=config["ticker"],
-            strategy_name=config["estrategia"],
-            base_stats=base_stats,
-            optimized_stats=optimized_stats,
-            buy_hold_stats=buy_hold_stats,
-            best_params=best_params,
-            optimization_results=optimization_results,
-        )
+        results_payload = {
+            "data": data,
+            "ticker": config["ticker"],
+            "strategy_name": config["estrategia"],
+            "base_stats": base_stats,
+            "optimized_stats": optimized_stats,
+            "buy_hold_stats": buy_hold_stats,
+            "best_params": best_params,
+            "optimization_results": optimization_results,
+        }
+        st.session_state["last_results"] = results_payload
+        render_results(**results_payload)
 
         # Guardamos las estadísticas para que el chatbot las analice
         st.session_state["last_stats"] = optimized_stats if optimized_stats is not None else base_stats
