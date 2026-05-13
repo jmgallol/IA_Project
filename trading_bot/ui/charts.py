@@ -208,6 +208,51 @@ def plot_equity_curve(stats):
     return fig
 
 
+def plot_equity_comparison(strategy_stats, buy_hold_stats, title="Estrategia vs Buy & Hold"):
+    """Compara la curva de capital de la estrategia contra Buy & Hold."""
+    strategy_equity_curve = strategy_stats._equity_curve
+    strategy_equity = (
+        strategy_equity_curve["Equity"]
+        if "Equity" in strategy_equity_curve.columns
+        else strategy_equity_curve.iloc[:, 0]
+    )
+    buy_hold_equity = buy_hold_stats["equity_curve"]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=strategy_equity.index,
+            y=strategy_equity,
+            mode="lines",
+            name="Estrategia",
+            line=dict(color=COLORS["equity"], width=3),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Estrategia: $%{y:,.2f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=buy_hold_equity.index,
+            y=buy_hold_equity,
+            mode="lines",
+            name="Buy & Hold",
+            line=dict(color=COLORS["sma_corta"], width=3, dash="dash"),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Buy & Hold: $%{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Fecha",
+        yaxis_title="Capital (USD)",
+        template="plotly_dark",
+        plot_bgcolor=COLORS["fondo_grafico"],
+        paper_bgcolor=COLORS["fondo_grafico"],
+        height=430,
+        hovermode="x unified",
+    )
+    return fig
+
+
 def plot_trades(df, stats):
     """
     Gráfico de precio con puntos de entrada y salida.

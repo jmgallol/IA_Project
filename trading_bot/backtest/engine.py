@@ -1,9 +1,12 @@
+import numpy as np
+import pandas as pd
 from backtesting import Backtest
 
 
 PRICE_COLUMNS = ["Open", "High", "Low", "Close"]
 VOLUME_COLUMN = "Volume"
 FRACTIONAL_UNIT = 1_000_000
+TRADING_PERIODS_PER_YEAR = 252
 
 
 def run_backtest(df, strategy_class, params, cash=10000):
@@ -63,6 +66,70 @@ def _prepare_backtest_data(df, cash):
         scaled_data[VOLUME_COLUMN] = scaled_data[VOLUME_COLUMN] * FRACTIONAL_UNIT
 
     return scaled_data, price_scale
+
+
+def calculate_buy_hold(df, cash=10000):
+    """
+    Calcula una linea base Buy & Hold sobre el mismo periodo del backtest.
+
+    La estrategia compra el activo al primer cierre disponible y mantiene la
+    posicion hasta el final. Las metricas se calculan desde la curva de capital
+    para compararlas contra la estrategia evaluada.
+    """
+    if df.empty:
+        raise ValueError("El DataFrame esta vacio")
+
+    if "Close" not in df.columns:
+        raise ValueError("Falta la columna requerida: Close")
+
+    close = df["Close"].dropna()
+    if close.empty:
+        raise ValueError("No hay precios de cierre validos para Buy & Hold")
+
+    initial_price = float(close.iloc[0])
+    final_price = float(close.iloc[-1])
+    if initial_price <= 0:
+        raise ValueError("El precio inicial debe ser mayor que cero")
+
+    quantity = cash / initial_price
+    equity = close * quantity
+    equity.name = "Equity"
+
+    total_return = ((equity.iloc[-1] - cash) / cash) * 100
+    max_drawdown = _calculate_max_drawdown(equity)
+    returns = equity.pct_change().dropna()
+    volatility = returns.std() * np.sqrt(TRADING_PERIODS_PER_YEAR) * 100
+    sharpe_ratio = _calculate_sharpe_ratio(returns)
+
+    return {
+        "initial_capital": cash,
+        "initial_price": initial_price,
+        "final_price": final_price,
+        "quantity": quantity,
+        "final_equity": float(equity.iloc[-1]),
+        "return_pct": float(total_return),
+        "max_drawdown_pct": float(max_drawdown),
+        "volatility_pct": float(volatility) if pd.notna(volatility) else 0.0,
+        "sharpe_ratio": float(sharpe_ratio),
+        "equity_curve": equity,
+    }
+
+
+def _calculate_max_drawdown(equity):
+    running_max = equity.cummax()
+    drawdown = (equity / running_max - 1) * 100
+    return drawdown.min()
+
+
+def _calculate_sharpe_ratio(returns):
+    if returns.empty:
+        return 0.0
+
+    volatility = returns.std()
+    if pd.isna(volatility) or volatility == 0:
+        return 0.0
+
+    return (returns.mean() / volatility) * np.sqrt(TRADING_PERIODS_PER_YEAR)
 
 
 def get_readable_stats(stats):

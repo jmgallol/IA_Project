@@ -5,7 +5,7 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-from backtest.engine import run_backtest
+from backtest.engine import calculate_buy_hold, run_backtest
 from backtest.optimizer import run_optimization
 from config.settings import MACD_PARAMS, RSI_PARAMS, SMA_PARAMS
 from data.loader import DataNotFoundError, download_data
@@ -13,8 +13,18 @@ from indicators.technical import add_indicators
 from strategies.macd_strategy import MACDStrategy
 from strategies.rsi_strategy import RSIStrategy
 from strategies.sma_strategy import SMAStrategy
-from ui.charts import plot_candlestick, plot_equity_curve, plot_trades
-from ui.metrics import render_best_params, render_metrics, render_optimization_results
+from ui.charts import (
+    plot_candlestick,
+    plot_equity_comparison,
+    plot_equity_curve,
+    plot_trades,
+)
+from ui.metrics import (
+    render_best_params,
+    render_buy_hold_comparison,
+    render_metrics,
+    render_optimization_results,
+)
 from ui.sidebar import render_sidebar
 from ui.chatbot import render_chatbot
 
@@ -134,24 +144,16 @@ def main():
         optimization_results = []
 
         if config["optimizar"]:
-            progress_bar = st.progress(0)
-            progress_text = st.empty()
+            best_params, optimized_stats, optimization_results = optimize_strategy(
+                data,
+                strategy_class,
+                strategy_config["param_grid"],
+                cash=config["capital"],
+                objective=config["objetivo"],
+                label="Optimizando parametros",
+            )
 
-            def update_progress(current, total, params):
-                progress_bar.progress(current / total)
-                progress_text.text(f"Optimizando {current}/{total}: {params}")
-
-            with st.spinner("Optimizando parametros..."):
-                best_params, optimized_stats, optimization_results = run_optimization(
-                    data,
-                    strategy_class,
-                    strategy_config["param_grid"],
-                    cash=config["capital"],
-                    progress_callback=update_progress,
-                )
-
-            progress_bar.empty()
-            progress_text.empty()
+        buy_hold_stats = calculate_buy_hold(data, cash=config["capital"])
 
         render_results(
             data=data,
@@ -159,6 +161,7 @@ def main():
             strategy_name=config["estrategia"],
             base_stats=base_stats,
             optimized_stats=optimized_stats,
+            buy_hold_stats=buy_hold_stats,
             best_params=best_params,
             optimization_results=optimization_results,
         )
@@ -185,12 +188,44 @@ def show_user_error(message):
     st.error(f"Error: {message}")
 
 
+def optimize_strategy(
+    data,
+    strategy_class,
+    param_grid,
+    cash,
+    objective,
+    label="Optimizando parametros",
+):
+    """Ejecuta grid search con una barra de progreso de Streamlit."""
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+
+    def update_progress(current, total, params):
+        progress_bar.progress(current / total)
+        progress_text.text(f"{label} {current}/{total}: {params}")
+
+    with st.spinner(f"{label}..."):
+        best_params, best_stats, optimization_results = run_optimization(
+            data,
+            strategy_class,
+            param_grid,
+            cash=cash,
+            progress_callback=update_progress,
+            objective=objective,
+        )
+
+    progress_bar.empty()
+    progress_text.empty()
+    return best_params, best_stats, optimization_results
+
+
 def render_results(
     data,
     ticker,
     strategy_name,
     base_stats,
     optimized_stats=None,
+    buy_hold_stats=None,
     best_params=None,
     optimization_results=None,
 ):
@@ -199,8 +234,13 @@ def render_results(
     st.write(f"Datos analizados: {len(data):,} registros")
 
     stats_to_plot = optimized_stats if optimized_stats is not None else base_stats
-    tab_data, tab_backtest, tab_optimization = st.tabs(
-        ["Datos e indicadores", "Backtesting", "Optimizacion"]
+    tab_data, tab_backtest, tab_buy_hold, tab_optimization = st.tabs(
+        [
+            "Datos e indicadores",
+            "Backtesting",
+            "Buy & Hold",
+            "Optimizacion",
+        ]
     )
 
     with tab_data:
@@ -212,6 +252,16 @@ def render_results(
         render_metrics(base_stats, optimized_stats)
         st.plotly_chart(plot_equity_curve(stats_to_plot), use_container_width=True)
         st.plotly_chart(plot_trades(data, stats_to_plot), use_container_width=True)
+
+    with tab_buy_hold:
+        if buy_hold_stats is None:
+            st.info("No hay datos de Buy & Hold para mostrar.")
+        else:
+            render_buy_hold_comparison(stats_to_plot, buy_hold_stats)
+            st.plotly_chart(
+                plot_equity_comparison(stats_to_plot, buy_hold_stats),
+                use_container_width=True,
+            )
 
     with tab_optimization:
         if optimized_stats is None or best_params is None:

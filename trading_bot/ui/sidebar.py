@@ -73,6 +73,15 @@ def render_sidebar():
         if optimize:
             st.info("La optimizacion ejecuta multiples backtests y puede tardar.")
 
+        objective = st.selectbox(
+            "Funcion objetivo",
+            ["Sharpe Ratio", "Score ajustado por riesgo"],
+            help=(
+                "Sharpe Ratio maximiza retorno ajustado por volatilidad. "
+                "El score ajustado penaliza drawdowns altos."
+            ),
+        )
+
         demo_mode = st.checkbox(
             "Usar datos de demostracion",
             value=False,
@@ -88,6 +97,7 @@ def render_sidebar():
         "estrategia": strategy,
         "capital": cash,
         "optimizar": optimize,
+        "objetivo": "risk_adjusted" if objective == "Score ajustado por riesgo" else "sharpe",
         "modo_demo": demo_mode,
         "ejecutar": run_analysis,
     }

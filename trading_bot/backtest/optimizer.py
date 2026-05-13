@@ -4,7 +4,14 @@ from math import isfinite
 from backtest.engine import run_backtest
 
 
-def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callback=None):
+def run_optimization(
+    df,
+    strategy_class,
+    param_grid,
+    cash=10000,
+    progress_callback=None,
+    objective="sharpe",
+):
     """
     Ejecuta una busqueda exhaustiva de parametros usando grid search.
 
@@ -14,6 +21,7 @@ def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callba
         param_grid: diccionario con listas o rangos de valores por parametro.
         cash: capital inicial.
         progress_callback: funcion opcional con firma (current, total, params).
+        objective: "sharpe" o "risk_adjusted".
 
     Returns:
         tuple: (best_params, best_stats, all_results).
@@ -25,7 +33,7 @@ def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callba
     ]
     combinations = list(product(*param_values))
 
-    best_sharpe = float("-inf")
+    best_score = float("-inf")
     best_params = None
     best_stats = None
     all_results = []
@@ -41,8 +49,11 @@ def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callba
             if not isfinite(sharpe_ratio):
                 sharpe_ratio = float("-inf")
 
+            score = calculate_optimization_score(stats, objective=objective)
+
             result = {
                 "params": params.copy(),
+                "score": score,
                 "sharpe_ratio": sharpe_ratio,
                 "return": stats["Return [%]"],
                 "max_drawdown": stats["Max. Drawdown [%]"],
@@ -51,8 +62,8 @@ def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callba
             }
             all_results.append(result)
 
-            if sharpe_ratio > best_sharpe:
-                best_sharpe = sharpe_ratio
+            if score > best_score:
+                best_score = score
                 best_params = params.copy()
                 best_stats = stats
         except Exception as error:
@@ -66,3 +77,18 @@ def run_optimization(df, strategy_class, param_grid, cash=10000, progress_callba
         raise ValueError(f"No se encontraron parametros validos. Errores iniciales: {details}")
 
     return best_params, best_stats, all_results
+
+
+def calculate_optimization_score(stats, objective="sharpe"):
+    """Calcula la funcion objetivo usada por el grid search."""
+    sharpe_ratio = stats["Sharpe Ratio"]
+    if not isfinite(sharpe_ratio):
+        sharpe_ratio = float("-inf")
+
+    if objective == "risk_adjusted":
+        return sharpe_ratio - abs(stats["Max. Drawdown [%]"]) * 0.5
+
+    if objective != "sharpe":
+        raise ValueError(f"Funcion objetivo no soportada: {objective}")
+
+    return sharpe_ratio

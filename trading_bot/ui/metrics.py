@@ -24,6 +24,7 @@ def render_metrics(stats_base, stats_opt=None):
 def _render_single_stats(stats, stats_base=None, compact=False):
     columns = st.columns(2 if compact else 3)
     metrics = [
+        ("Capital final", ("Equity Final [$]",), "$"),
         ("Retorno total", ("Return [%]",), "%"),
         ("Retorno Mercado (B&H)", ("Buy & Hold Return [%]",), "%"),
         ("Sharpe Ratio", ("Sharpe Ratio",), ""),
@@ -48,9 +49,19 @@ def _render_single_stats(stats, stats_base=None, compact=False):
             if base_key is None:
                 continue
             delta_value = value - stats_base[base_key]
-            delta = f"{delta_value:.2f}{suffix}" if key != "# Trades" else f"{int(delta_value)}"
+            if key == "# Trades":
+                delta = f"{int(delta_value)}"
+            elif suffix == "$":
+                delta = f"${delta_value:,.2f}"
+            else:
+                delta = f"{delta_value:.2f}{suffix}"
 
-        formatted = f"{int(value)}" if key == "# Trades" else f"{value:.2f}{suffix}"
+        if key == "# Trades":
+            formatted = f"{int(value)}"
+        elif suffix == "$":
+            formatted = f"${value:,.2f}"
+        else:
+            formatted = f"{value:.2f}{suffix}"
         columns[index % len(columns)].metric(label, formatted, delta=delta)
 
 
@@ -83,16 +94,19 @@ def render_optimization_results(results):
         st.info("No hay resultados de optimizacion para mostrar.")
         return
 
-    results_df = results_df.sort_values("sharpe_ratio", ascending=False).head(10)
+    sort_column = "score" if "score" in results_df.columns else "sharpe_ratio"
+    results_df = results_df.sort_values(sort_column, ascending=False).head(10)
     display_df = results_df[
-        ["sharpe_ratio", "return", "max_drawdown", "win_rate", "trades", "params"]
+        ["score", "sharpe_ratio", "return", "max_drawdown", "win_rate", "trades", "params"]
     ].copy()
+    display_df["score"] = display_df["score"].map(lambda value: f"{value:.4f}")
     display_df["sharpe_ratio"] = display_df["sharpe_ratio"].map(lambda value: f"{value:.4f}")
     display_df["return"] = display_df["return"].map(lambda value: f"{value:.2f}%")
     display_df["max_drawdown"] = display_df["max_drawdown"].map(lambda value: f"{value:.2f}%")
     display_df["win_rate"] = display_df["win_rate"].map(lambda value: f"{value:.2f}%")
 
     display_df.columns = [
+        "Score",
         "Sharpe Ratio",
         "Retorno",
         "Drawdown maximo",
@@ -101,3 +115,71 @@ def render_optimization_results(results):
         "Parametros",
     ]
     st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+
+def render_buy_hold_comparison(strategy_stats, buy_hold_stats):
+    """Muestra una comparacion directa entre estrategia y Buy & Hold."""
+    strategy_return = strategy_stats["Return [%]"]
+    strategy_sharpe = strategy_stats["Sharpe Ratio"]
+    strategy_drawdown = strategy_stats["Max. Drawdown [%]"]
+    strategy_final_equity = _get_final_equity(strategy_stats)
+    buy_hold_return = buy_hold_stats["return_pct"]
+    buy_hold_sharpe = buy_hold_stats["sharpe_ratio"]
+    buy_hold_drawdown = buy_hold_stats["max_drawdown_pct"]
+    return_diff = strategy_return - buy_hold_return
+
+    st.subheader("Comparacion contra Buy & Hold")
+    cols = st.columns(4)
+    cols[0].metric("Retorno estrategia", f"{strategy_return:.2f}%")
+    cols[1].metric("Retorno Buy & Hold", f"{buy_hold_return:.2f}%")
+    cols[2].metric("Diferencia retorno", f"{return_diff:.2f}%")
+    cols[3].metric("Capital final estrategia", f"${strategy_final_equity:,.2f}")
+
+    comparison = pd.DataFrame(
+        [
+            {
+                "Metrica": "Capital final",
+                "Estrategia": f"${strategy_final_equity:,.2f}",
+                "Buy & Hold": f"${buy_hold_stats['final_equity']:,.2f}",
+            },
+            {
+                "Metrica": "Retorno total",
+                "Estrategia": f"{strategy_return:.2f}%",
+                "Buy & Hold": f"{buy_hold_return:.2f}%",
+            },
+            {
+                "Metrica": "Sharpe Ratio",
+                "Estrategia": f"{strategy_sharpe:.2f}",
+                "Buy & Hold": f"{buy_hold_sharpe:.2f}",
+            },
+            {
+                "Metrica": "Drawdown maximo",
+                "Estrategia": f"{strategy_drawdown:.2f}%",
+                "Buy & Hold": f"{buy_hold_drawdown:.2f}%",
+            },
+            {
+                "Metrica": "Volatilidad anual",
+                "Estrategia": "Calculada por backtesting.py",
+                "Buy & Hold": f"{buy_hold_stats['volatility_pct']:.2f}%",
+            },
+        ]
+    )
+    st.dataframe(comparison, use_container_width=True, hide_index=True)
+
+    if return_diff > 0:
+        st.success(
+            "La estrategia supero a Buy & Hold en retorno total para este periodo historico."
+        )
+    else:
+        st.warning(
+            "Buy & Hold obtuvo mejor retorno total que la estrategia en este periodo historico."
+        )
+
+
+def _get_final_equity(stats):
+    if "Equity Final [$]" in stats.index:
+        return float(stats["Equity Final [$]"])
+
+    equity_curve = stats._equity_curve
+    equity = equity_curve["Equity"] if "Equity" in equity_curve.columns else equity_curve.iloc[:, 0]
+    return float(equity.iloc[-1])
