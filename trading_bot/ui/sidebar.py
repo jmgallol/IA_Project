@@ -51,9 +51,15 @@ def render_sidebar():
         st.divider()
 
         st.subheader("Estrategia")
+        analysis_mode = st.radio(
+            "Modo de analisis",
+            ["Evaluar una estrategia", "Comparar todas las estrategias"],
+        )
+
         strategy = st.selectbox(
             "Elige una estrategia",
             ["RSI Strategy", "SMA Crossover", "MACD Strategy"],
+            disabled=analysis_mode == "Comparar todas las estrategias",
         )
 
         st.divider()
@@ -69,9 +75,16 @@ def render_sidebar():
 
         st.divider()
 
-        optimize = st.checkbox("Optimizar parametros", value=False)
+        compare_all = analysis_mode == "Comparar todas las estrategias"
+        optimize = st.checkbox(
+            "Optimizar parametros",
+            value=compare_all,
+            disabled=compare_all,
+        )
         if optimize:
             st.info("La optimizacion ejecuta multiples backtests y puede tardar.")
+        if compare_all:
+            st.info("Este modo optimiza RSI, SMA y MACD automaticamente.")
 
         objective = st.selectbox(
             "Funcion objetivo",
@@ -95,6 +108,7 @@ def render_sidebar():
         "fecha_inicio": start_date.strftime("%Y-%m-%d"),
         "fecha_fin": end_date.strftime("%Y-%m-%d"),
         "estrategia": strategy,
+        "modo_analisis": "compare_all" if compare_all else "single",
         "capital": cash,
         "optimizar": optimize,
         "objetivo": "risk_adjusted" if objective == "Score ajustado por riesgo" else "sharpe",

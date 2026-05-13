@@ -122,7 +122,7 @@ def render_buy_hold_comparison(strategy_stats, buy_hold_stats):
     strategy_return = strategy_stats["Return [%]"]
     strategy_sharpe = strategy_stats["Sharpe Ratio"]
     strategy_drawdown = strategy_stats["Max. Drawdown [%]"]
-    strategy_final_equity = _get_final_equity(strategy_stats)
+    strategy_final_equity = get_final_equity(strategy_stats)
     buy_hold_return = buy_hold_stats["return_pct"]
     buy_hold_sharpe = buy_hold_stats["sharpe_ratio"]
     buy_hold_drawdown = buy_hold_stats["max_drawdown_pct"]
@@ -176,10 +176,135 @@ def render_buy_hold_comparison(strategy_stats, buy_hold_stats):
         )
 
 
-def _get_final_equity(stats):
+def render_strategy_comparison_table(strategy_results, buy_hold_stats):
+    """Muestra una tabla con estrategias optimizadas y Buy & Hold."""
+    rows = []
+    for result in strategy_results:
+        stats = result["stats"]
+        rows.append(
+            {
+                "Estrategia": result["strategy"],
+                "Mejores parametros": _format_params(result["best_params"]),
+                "Retorno total": f"{safe_metric(stats, 'Return [%]'):.2f}%",
+                "Sharpe Ratio": f"{safe_metric(stats, 'Sharpe Ratio'):.2f}",
+                "Drawdown maximo": f"{safe_metric(stats, 'Max. Drawdown [%]'):.2f}%",
+                "Win Rate": f"{safe_metric(stats, 'Win Rate [%]'):.2f}%",
+                "Operaciones": int(safe_metric(stats, "# Trades")),
+                "Capital final": f"${get_final_equity(stats):,.2f}",
+            }
+        )
+
+    rows.append(
+        {
+            "Estrategia": "Buy & Hold",
+            "Mejores parametros": "Compra inicial y mantener",
+            "Retorno total": f"{buy_hold_stats['return_pct']:.2f}%",
+            "Sharpe Ratio": f"{buy_hold_stats['sharpe_ratio']:.2f}",
+            "Drawdown maximo": f"{buy_hold_stats['max_drawdown_pct']:.2f}%",
+            "Win Rate": "N/A",
+            "Operaciones": "1 compra",
+            "Capital final": f"${buy_hold_stats['final_equity']:,.2f}",
+        }
+    )
+
+    st.subheader("Tabla comparativa")
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def render_strategy_winners(winners):
+    """Resume que estrategia gano por cada criterio."""
+    st.subheader("Mejores estrategias por criterio")
+    cols = st.columns(4)
+    cols[0].metric("Mayor retorno", winners["highest_return"]["strategy"])
+    cols[1].metric("Menor drawdown", winners["lowest_drawdown"]["strategy"])
+    cols[2].metric("Mejor Sharpe", winners["best_sharpe"]["strategy"])
+    cols[3].metric("Mas equilibrada", winners["balanced"]["strategy"])
+
+    st.info(
+        "La estrategia mas equilibrada usa el score: "
+        "Sharpe Ratio - abs(Drawdown maximo) * 0.5."
+    )
+
+
+def render_comparison_guide():
+    """Explica como leer la comparacion sin dar recomendaciones financieras."""
+    st.subheader("Como interpretar la comparacion")
+    st.markdown(
+        """
+        - Cada estrategia responde a una logica diferente.
+        - RSI busca posibles zonas de sobrecompra o sobreventa, asociadas a reversion a la media.
+        - SMA Crossover y MACD siguen cruces y cambios de tendencia o momentum.
+        - Buy & Hold sirve como linea base: comprar al inicio y mantener hasta el final.
+        - La mejor estrategia no siempre es la de mayor retorno, porque tambien importa el riesgo.
+        - Una estrategia equilibrada debe considerar retorno, Sharpe Ratio, drawdown y numero de operaciones.
+        - Los resultados son historicos y no garantizan resultados futuros.
+        """
+    )
+
+
+def build_comparison_summary(strategy_results, buy_hold_stats, winners):
+    """Crea un resumen simple para que el asistente pueda responder preguntas."""
+    rows = []
+    for result in strategy_results:
+        stats = result["stats"]
+        rows.append(
+            {
+                "strategy": result["strategy"],
+                "best_params": result["best_params"],
+                "return_pct": safe_metric(stats, "Return [%]"),
+                "sharpe_ratio": safe_metric(stats, "Sharpe Ratio"),
+                "max_drawdown_pct": safe_metric(stats, "Max. Drawdown [%]"),
+                "win_rate_pct": safe_metric(stats, "Win Rate [%]"),
+                "trades": int(safe_metric(stats, "# Trades")),
+                "final_equity": get_final_equity(stats),
+                "balanced_score": calculate_balanced_score(stats),
+                "beats_buy_hold": safe_metric(stats, "Return [%]") > buy_hold_stats["return_pct"],
+            }
+        )
+
+    return {
+        "rows": rows,
+        "buy_hold": {
+            "return_pct": buy_hold_stats["return_pct"],
+            "sharpe_ratio": buy_hold_stats["sharpe_ratio"],
+            "max_drawdown_pct": buy_hold_stats["max_drawdown_pct"],
+            "final_equity": buy_hold_stats["final_equity"],
+        },
+        "winners": {
+            key: value["strategy"]
+            for key, value in winners.items()
+        },
+    }
+
+
+def safe_metric(stats, key, default=0.0):
+    """Obtiene una metrica evitando NaN o infinitos."""
+    try:
+        value = float(stats[key])
+    except Exception:
+        return default
+
+    if pd.isna(value) or value in (float("inf"), float("-inf")):
+        return default
+
+    return value
+
+
+def calculate_balanced_score(stats):
+    return safe_metric(stats, "Sharpe Ratio") - abs(safe_metric(stats, "Max. Drawdown [%]")) * 0.5
+
+
+def get_final_equity(stats):
     if "Equity Final [$]" in stats.index:
         return float(stats["Equity Final [$]"])
 
     equity_curve = stats._equity_curve
     equity = equity_curve["Equity"] if "Equity" in equity_curve.columns else equity_curve.iloc[:, 0]
     return float(equity.iloc[-1])
+
+
+def _format_params(params):
+    if not params:
+        return "N/A"
+
+    return ", ".join(f"{key}={value}" for key, value in params.items())

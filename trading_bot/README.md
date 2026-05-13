@@ -1,89 +1,318 @@
-# Proyecto Final: Trading Bot Inteligente con Optimización Heurística
-**Curso:** Introducción a la Inteligencia Artificial 2026-1
+# Proyecto Final: Trading Bot Educativo con Backtesting y Optimizacion
 
----
+**Curso:** Introduccion a la Inteligencia Artificial 2026-1
 
-## 1. Planteamiento del Problema
-En los mercados financieros, la toma de decisiones humana suele estar sesgada por emociones como el miedo o la codicia, lo que lleva a ejecuciones ineficientes. El problema radica en cómo identificar reglas de inversión consistentes y, lo más importante, cómo encontrar los parámetros óptimos para dichas reglas en un mercado que cambia constantemente. Este proyecto aborda la necesidad de una herramienta automatizada que no solo ejecute estrategias, sino que utilice técnicas de **IA y Optimización** para encontrar la configuración con mejor relación riesgo-beneficio.
+Este proyecto es una aplicacion interactiva en Python y Streamlit para evaluar estrategias de trading usando datos historicos. El sistema permite probar reglas tecnicas, optimizar parametros con Grid Search, comparar varias estrategias automaticamente y contrastar el resultado contra una linea base simple: Buy & Hold.
 
-## 2. Objetivo General
-Desarrollar un sistema funcional de trading algorítmico que permita el backtesting de estrategias técnicas y la optimización automática de parámetros mediante búsqueda en espacio de estados, proporcionando una interfaz intuitiva para la toma de decisiones basada en datos.
+El sistema no predice el futuro ni recomienda inversiones reales. Su objetivo es probar hipotesis con datos historicos y mostrar metricas que ayuden a comparar estrategias de forma cuantitativa.
 
-## 3. Metodología
-El proyecto sigue un enfoque de tubería de datos (pipeline) que integra la obtención de información, el procesamiento técnico y la ejecución de modelos.
+## Planteamiento del Problema
 
-### Diagrama de Flujo del Proceso
+Muchos usuarios aplican indicadores tecnicos con parametros fijos, por ejemplo RSI 30/70 o medias moviles de 20 y 50 periodos, sin validar si esos parametros funcionan historicamente para un activo especifico. Esto puede generar conclusiones debiles, porque una regla que funciona para una accion puede no funcionar para una criptomoneda o para otro periodo de mercado.
+
+Tambien es importante comparar cualquier estrategia contra una alternativa simple. Si una estrategia activa no supera a Buy & Hold, entonces puede no estar aportando valor frente a simplemente comprar el activo y mantenerlo durante el periodo evaluado.
+
+## Objetivo General
+
+Desarrollar una aplicacion interactiva que permita evaluar, optimizar y comparar estrategias de trading usando datos historicos, indicadores tecnicos, backtesting, comparacion contra Buy & Hold y metricas de retorno y riesgo.
+
+## Metodologia
+
+Flujo principal del sistema:
+
 ```mermaid
-graph TD
-    A[Inicio: Selección de Activo y Fechas] --> B[Descarga de Datos Históricos - Yahoo Finance]
-    B --> C[Cálculo de Indicadores Técnicos - RSI, MACD, SMA]
-    C --> D{¿Optimizar Parámetros?}
-    D -- SÍ --> E[Búsqueda Grid Search: Optimización Heurística]
-    E --> F[Selección de Mejores Parámetros - Máximo Sharpe Ratio]
-    D -- NO --> G[Uso de Parámetros Base]
-    F --> H[Ejecución de Motor de Backtesting]
-    G --> H[Ejecución de Motor de Backtesting]
-    H --> I[Generación de Métricas: Retorno, Drawdown, Win Rate]
-    I --> J[Visualización Interactiva en Streamlit]
-    J --> K[Fin: Interpretación de Resultados con Bot de Apoyo]
+flowchart TD
+    A[Usuario selecciona activo, fechas y modo de analisis] --> B[Sistema descarga datos historicos]
+    B --> C[Sistema calcula indicadores tecnicos]
+    C --> D[Sistema ejecuta backtesting]
+    D --> E{Optimizar parametros?}
+    E -- Si --> F[Grid Search sobre combinaciones de parametros]
+    E -- No --> G[Usar parametros base]
+    F --> H[Seleccionar mejores parametros]
+    G --> I[Generar metricas]
+    H --> I[Generar metricas]
+    I --> J[Comparar estrategia o estrategias contra Buy & Hold]
+    J --> K[Mostrar graficas, metricas e interpretacion]
+    K --> L[Asistente responde preguntas sobre los resultados]
 ```
 
-## 4. Desarrollo e Implementación
-El sistema está construido modularmente para separar la lógica de negocio de la interfaz de usuario.
+## Desarrollo
 
-### Componentes de IA e Ingeniería:
-*   **Optimización (IA):** Implementación de una búsqueda exhaustiva (Grid Search) en el archivo `backtest/optimizer.py` para maximizar la función objetivo (Sharpe Ratio).
-*   **Sistemas Basados en Reglas:** Estrategias lógicas en `strategies/` que actúan como agentes de decisión.
-*   **Procesamiento de Lenguaje Natural (Bot de Apoyo):** Un asistente conversacional en `ui/chatbot.py` que guía al usuario y explica términos técnicos.
+### Streamlit
 
-### Arquitectura técnica:
-*   **Backend:** Python 3.11
-*   **Motor de Simulación:** `backtesting.py` con soporte para comisiones y slippage.
-*   **Interfaz:** Streamlit para una experiencia web reactiva.
-*   **Datos:** API de `yfinance` para datos bursátiles en tiempo real.
+La interfaz esta construida con Streamlit. El usuario puede seleccionar ticker, fechas, modo de analisis, estrategia, capital inicial, modo demostracion, optimizacion y funcion objetivo.
 
-## 5. Resultados
-El sistema genera tres niveles de resultados:
-1.  **Visuales:** Gráficos de velas japonesas, curvas de capital (Equity) y marcado de puntos de compra/venta.
-2.  **Estadísticos:** KPIs financieros como Sharpe Ratio, Profit Factor y Max Drawdown.
-3.  **Comparativos:** Tabla de los 10 mejores conjuntos de parámetros encontrados durante la optimización.
+### Datos historicos
 
-## 6. Discusión y Análisis
-La principal ventaja de este sistema es su capacidad de superar la estrategia pasiva de "Buy & Hold" (comprar y mantener) mediante la detección de cambios de tendencia. 
-*   **Análisis Crítico:** Durante las pruebas, se observó que la optimización previene pérdidas mayores en mercados laterales, aunque requiere una selección cuidadosa del periodo histórico para evitar el "overfitting" (sobreajuste).
-*   **Estado del Arte:** A diferencia de herramientas básicas, este bot integra un asistente de IA que democratiza el acceso al trading algorítmico para usuarios no expertos.
+La aplicacion descarga datos OHLCV historicos desde Yahoo Finance usando el endpoint chart. Tambien incluye un modo demostracion con datos sinteticos para probar la app cuando Yahoo Finance falla o bloquea solicitudes.
 
----
+### Indicadores tecnicos
 
-## 🛠️ Instalación y Ejecución
+El sistema calcula indicadores usados por las estrategias:
 
-### Requisitos previos:
-- Python 3.11 (Instalado durante el proceso)
-- pip
+- RSI.
+- MACD.
+- SMA 20 y SMA 50.
+- Bandas de Bollinger.
 
-### Pasos:
-1. **Activar el entorno virtual:**
-   ```bash
-   .\env\Scripts\activate
-   ```
-2. **Instalar dependencias:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Ejecutar la aplicación:**
-   ```bash
-   streamlit run app.py
-   ```
+### Estrategias implementadas
 
----
+El proyecto mantiene tres estrategias tecnicas:
 
-## 📂 Estructura de Archivos
-*   `app.py`: Punto de entrada principal.
-*   `backtest/`: Motores de cálculo y optimización.
-*   `strategies/`: Lógica de las 3 estrategias disponibles.
-*   `ui/`: Módulos de la interfaz, incluyendo el **Chatbot de Apoyo**.
-*   `indicators/`: Cálculos matemáticos de indicadores.
+- `RSIStrategy`.
+- `SMAStrategy`.
+- `MACDStrategy`.
 
----
+Cada estrategia usa reglas simples de compra y venta basadas en indicadores tecnicos.
 
-**Desarrollado para el curso de Introducción a la IA - 2026**
+### Backtesting
+
+El backtesting simula como se habria comportado una estrategia sobre datos historicos. La aplicacion usa `backtesting.py` para calcular operaciones, curva de capital y metricas como retorno, capital final, Sharpe Ratio, drawdown maximo, win rate y numero de operaciones.
+
+Para activos caros como BTC-USD o ETH-USD, el motor escala internamente los precios cuando el capital inicial no alcanza para comprar una unidad completa. Esto permite simular micro-unidades y evita backtests con cero operaciones por falta de soporte fraccional en la libreria.
+
+### Grid Search
+
+La optimizacion se realiza con Grid Search. El sistema evalua varias combinaciones de parametros y selecciona la mejor segun una funcion objetivo:
+
+- Sharpe Ratio.
+- Score ajustado por riesgo:
+
+```text
+Score = Sharpe Ratio - abs(Max Drawdown) * 0.5
+```
+
+El score ajustado penaliza estrategias con drawdowns altos.
+
+### Comparacion automatica de estrategias
+
+El modo `Comparar todas las estrategias` optimiza individualmente:
+
+- RSI Strategy.
+- SMA Crossover.
+- MACD Strategy.
+
+Para cada estrategia, el sistema ejecuta Grid Search, toma los mejores parametros, calcula el backtesting resultante y compara las metricas contra Buy & Hold. La tabla comparativa incluye:
+
+- mejores parametros;
+- retorno total;
+- Sharpe Ratio;
+- drawdown maximo;
+- Win Rate;
+- numero de operaciones;
+- capital final.
+
+Tambien se genera una grafica con las curvas de capital de RSI, SMA, MACD y Buy & Hold en el mismo periodo.
+
+El sistema identifica:
+
+- estrategia con mayor retorno;
+- estrategia con menor drawdown;
+- estrategia con mejor Sharpe Ratio;
+- estrategia mas equilibrada.
+
+La estrategia mas equilibrada se calcula con:
+
+```text
+Score = Sharpe Ratio - abs(Max Drawdown) * 0.5
+```
+
+### Buy & Hold
+
+Buy & Hold es la linea base del proyecto. Representa comprar el activo al inicio del periodo y mantenerlo hasta el final.
+
+Formulas:
+
+```text
+Quantity = Initial Capital / Initial Price
+Final Equity = Quantity * Final Price
+Buy Hold Return = (Final Equity - Initial Capital) / Initial Capital
+```
+
+El sistema calcula:
+
+- curva de capital de Buy & Hold;
+- retorno total;
+- capital final;
+- drawdown maximo;
+- volatilidad;
+- Sharpe Ratio.
+
+### Metricas
+
+Las metricas principales son:
+
+- **Capital final:** valor final del dinero despues de aplicar la estrategia.
+- **Retorno total:** cambio porcentual del capital.
+- **Sharpe Ratio:** retorno ajustado por volatilidad.
+- **Drawdown maximo:** peor caida desde un maximo hasta un minimo posterior.
+- **Win rate:** porcentaje de operaciones ganadoras.
+- **Numero de operaciones:** cantidad de trades ejecutados.
+- **Profit Factor:** relacion entre ganancias y perdidas.
+
+### Asistente conversacional
+
+La app incluye un asistente de apoyo que interpreta resultados historicos. En el modo comparativo puede responder preguntas como:
+
+- cual estrategia fue mas rentable;
+- cual tuvo menor drawdown;
+- cual tuvo mejor Sharpe Ratio;
+- cual supero a Buy & Hold;
+- cual parece mas equilibrada.
+
+El asistente debe interpretarse como apoyo educativo. No entrega recomendaciones financieras y sus respuestas se basan solamente en los resultados historicos calculados por la aplicacion.
+
+## Resultados
+
+Esta seccion queda preparada para incluir capturas o ejemplos obtenidos durante la sustentacion.
+
+### Resultados de la estrategia
+
+Incluir:
+
+- activo evaluado;
+- estrategia seleccionada;
+- periodo analizado;
+- parametros usados;
+- capital inicial;
+- capital final;
+- retorno total;
+- Sharpe Ratio;
+- drawdown maximo;
+- numero de operaciones.
+
+### Comparacion contra Buy & Hold
+
+Incluir:
+
+- capital final de la estrategia;
+- capital final de Buy & Hold;
+- retorno de la estrategia;
+- retorno de Buy & Hold;
+- diferencia de retorno;
+- Sharpe Ratio de ambos;
+- drawdown maximo de ambos;
+- grafica comparativa de curvas de capital.
+
+### Comparacion automatica de estrategias
+
+Incluir:
+
+- tabla comparativa de RSI, SMA, MACD y Buy & Hold;
+- curva de capital conjunta;
+- estrategia con mayor retorno;
+- estrategia con menor drawdown;
+- estrategia con mejor Sharpe Ratio;
+- estrategia mas equilibrada;
+- respuesta del asistente ante una pregunta comparativa.
+
+## Discusion
+
+El sistema no garantiza ganancias futuras. Los resultados dependen del activo, las fechas seleccionadas, los parametros y las condiciones historicas del mercado.
+
+Una estrategia puede verse bien en un periodo especifico y mal en otro. Por eso los resultados deben interpretarse como evidencia historica, no como prediccion. La comparacion contra Buy & Hold permite saber si la estrategia realmente aporta valor frente a una alternativa simple.
+
+La comparacion automatica mejora el analisis porque evita evaluar una sola estrategia de forma aislada. Sin embargo, elegir la mejor estrategia historica no garantiza que esa misma estrategia funcione en el futuro.
+
+El proyecto demuestra el uso de optimizacion aplicada a un problema financiero, pero debe presentarse como una herramienta de analisis y validacion, no como una herramienta para recomendar inversiones reales.
+
+## Instrucciones de instalacion y ejecucion
+
+### Requisitos previos
+
+- Python 3.11 o superior.
+- pip.
+- Entorno virtual del proyecto.
+
+### Activar el entorno virtual
+
+Desde PowerShell:
+
+```powershell
+cd "C:\Users\User\Desktop\EAFIT\Semestre 2026 -1\IA\PROYECTO FINAL\IA_Project\trading_bot"
+.\.venv\Scripts\Activate.ps1
+```
+
+Si PowerShell bloquea la activacion:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+### Instalar dependencias
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Ejecutar la aplicacion
+
+```powershell
+streamlit run app.py
+```
+
+Abrir en el navegador:
+
+```text
+http://localhost:8501
+```
+
+Si el puerto esta ocupado:
+
+```powershell
+streamlit run app.py --server.port 8502
+```
+
+## Estructura del proyecto
+
+```text
+trading_bot/
+  app.py
+  config/
+    settings.py
+  data/
+    loader.py
+  indicators/
+    technical.py
+  strategies/
+    rsi_strategy.py
+    sma_strategy.py
+    macd_strategy.py
+  backtest/
+    engine.py
+    optimizer.py
+  ui/
+    sidebar.py
+    charts.py
+    metrics.py
+    chatbot.py
+  requirements.txt
+```
+
+## Uso recomendado para la demo
+
+### Probar comparacion contra Buy & Hold
+
+1. Seleccionar un activo, por ejemplo `AAPL` o `BTC-USD`.
+2. Seleccionar una estrategia.
+3. Ejecutar el analisis.
+4. Abrir la pestana `Buy & Hold`.
+5. Comparar capital final, retorno, drawdown, Sharpe Ratio y curvas de capital.
+
+### Probar optimizacion
+
+1. Activar `Optimizar parametros`.
+2. Elegir `Sharpe Ratio` o `Score ajustado por riesgo`.
+3. Ejecutar el analisis.
+4. Revisar la pestana `Optimizacion`.
+5. Comparar parametros base contra parametros optimizados.
+
+### Probar comparacion automatica
+
+1. En `Modo de analisis`, seleccionar `Comparar todas las estrategias`.
+2. Elegir activo, fechas, capital y funcion objetivo.
+3. Ejecutar el analisis.
+4. Revisar la pestana `Comparacion`.
+5. Revisar la grafica `Curvas de capital`.
+6. Preguntar al asistente: `Cual estrategia fue mas rentable?` o `Cual fue mas equilibrada?`.
