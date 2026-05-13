@@ -1,5 +1,6 @@
 import logging
 
+# pyrefly: ignore [missing-import]
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -15,6 +16,7 @@ from strategies.sma_strategy import SMAStrategy
 from ui.charts import plot_candlestick, plot_equity_curve, plot_trades
 from ui.metrics import render_best_params, render_metrics, render_optimization_results
 from ui.sidebar import render_sidebar
+from ui.chatbot import render_chatbot
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,10 @@ def main():
     st.caption("Sistema educativo para evaluar estrategias de trading con datos historicos.")
 
     config = render_sidebar()
+    
+    # El chatbot recibe las estadísticas guardadas en la sesión (si existen)
+    stats_for_bot = st.session_state.get("last_stats")
+    render_chatbot(stats=stats_for_bot, ticker=config["ticker"])
 
     if not config["ejecutar"]:
         st.info("Configura el activo, periodo y estrategia en el panel lateral para iniciar.")
@@ -156,6 +162,9 @@ def main():
             best_params=best_params,
             optimization_results=optimization_results,
         )
+
+        # Guardamos las estadísticas para que el chatbot las analice
+        st.session_state["last_stats"] = optimized_stats if optimized_stats is not None else base_stats
 
     except DataNotFoundError as error:
         logger.warning("No fue posible cargar datos: %s", error)

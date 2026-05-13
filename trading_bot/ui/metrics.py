@@ -25,6 +25,7 @@ def _render_single_stats(stats, stats_base=None, compact=False):
     columns = st.columns(2 if compact else 3)
     metrics = [
         ("Retorno total", ("Return [%]",), "%"),
+        ("Retorno Mercado (B&H)", ("Buy & Hold Return [%]",), "%"),
         ("Sharpe Ratio", ("Sharpe Ratio",), ""),
         ("Drawdown maximo", ("Max. Drawdown [%]",), "%"),
         ("Win rate", ("Win Rate [%]",), "%"),
