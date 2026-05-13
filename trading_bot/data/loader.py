@@ -6,6 +6,7 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
+import streamlit as st
 
 
 class DataNotFoundError(Exception):
@@ -13,6 +14,7 @@ class DataNotFoundError(Exception):
     pass
 
 
+@st.cache_data
 def download_data(ticker, start, end):
     """
     Descarga datos históricos de precios usando yfinance.

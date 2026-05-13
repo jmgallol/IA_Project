@@ -1,6 +1,6 @@
 # ========================================
 # indicators/technical.py
-# Cálculo de indicadores técnicos sin dependencias externas
+# Cálculo de indicadores técnicos con pandas-ta
 # ========================================
 
 import pandas as pd
