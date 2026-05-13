@@ -152,7 +152,7 @@ Las metricas principales son:
 
 ### Asistente conversacional
 
-La app incluye un asistente de apoyo que interpreta resultados historicos. En el modo comparativo puede responder preguntas como:
+La app incluye un asistente de apoyo con Gemini. El asistente recibe un contexto estructurado generado por la aplicacion y debe responder solo con base en esos resultados historicos. En el modo comparativo puede responder preguntas como:
 
 - cual estrategia fue mas rentable;
 - cual tuvo menor drawdown;
@@ -160,7 +160,7 @@ La app incluye un asistente de apoyo que interpreta resultados historicos. En el
 - cual supero a Buy & Hold;
 - cual parece mas equilibrada.
 
-El asistente debe interpretarse como apoyo educativo. No entrega recomendaciones financieras y sus respuestas se basan solamente en los resultados historicos calculados por la aplicacion.
+El asistente debe interpretarse como apoyo educativo. No entrega recomendaciones financieras y sus respuestas se basan solamente en los resultados historicos calculados por la aplicacion. Si Gemini no esta configurado o falla, la app usa una respuesta local basica como respaldo.
 
 ## Resultados
 
@@ -245,6 +245,22 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```powershell
 pip install -r requirements.txt
 ```
+
+### Configurar Gemini para el asistente
+
+Crear un archivo local:
+
+```text
+.streamlit/secrets.toml
+```
+
+Con este contenido:
+
+```toml
+GEMINI_API_KEY = "tu_api_key"
+```
+
+El archivo `.streamlit/` esta ignorado por Git para evitar subir credenciales. Tambien se puede usar una variable de entorno llamada `GEMINI_API_KEY`.
 
 ### Ejecutar la aplicacion
 

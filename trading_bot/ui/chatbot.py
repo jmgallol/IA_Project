@@ -1,22 +1,30 @@
 # pyrefly: ignore [missing-import]
+import json
+import os
+
 import streamlit as st
+
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+
+
+SYSTEM_PROMPT = """
+Eres un asistente educativo para una app academica de backtesting de estrategias de trading.
+
+Reglas obligatorias:
+- Responde solo usando el CONTEXTO_ANALISIS entregado por la aplicacion.
+- Si el contexto no contiene un dato, dilo claramente. No inventes metricas, fechas, precios ni parametros.
+- No recomiendes comprar, vender, holdear ni invertir dinero real.
+- Usa frases como "segun los resultados historicos", "en el periodo evaluado" y "no garantiza resultados futuros".
+- Interpreta los resultados como hipotesis de analisis, no como recomendacion de inversion.
+- Explica en espanol claro, con respuestas breves y utiles para una demo academica.
+- Si el usuario pide consejo financiero real, rechaza suavemente y vuelve al analisis historico.
+"""
 
 
 def render_chatbot(stats=None, ticker="el activo", comparison=None):
-    """Renderiza un asistente simple basado en resultados historicos."""
+    """Renderiza un asistente LLM con fallback local."""
     st.sidebar.divider()
     st.sidebar.subheader(f"Analista IA: {ticker}")
-
-    kb = {
-        "sharpe": "El Sharpe Ratio mide retorno ajustado por volatilidad. Un valor mayor indica mejor relacion retorno/riesgo, pero debe revisarse junto con drawdown y operaciones.",
-        "drawdown": "El drawdown maximo es la peor caida del capital desde un pico hasta un minimo posterior.",
-        "win rate": "Win Rate es el porcentaje de operaciones ganadoras. No basta por si solo: tambien importa cuanto se gana y cuanto se pierde.",
-        "profit factor": "Profit Factor compara ganancias brutas contra perdidas brutas. Puede salir NaN si hay pocas operaciones o no hay perdidas realizadas.",
-        "optimizacion": "La optimizacion prueba combinaciones de parametros y elige la mejor segun la funcion objetivo seleccionada.",
-        "rsi": "RSI se asocia a reversion a la media: busca posibles zonas de sobrecompra o sobreventa.",
-        "macd": "MACD intenta detectar cambios de tendencia o momentum mediante medias exponenciales.",
-        "sma": "SMA Crossover usa cruces de medias moviles para seguir posibles tendencias.",
-    }
 
     if "messages" not in st.session_state:
         st.session_state.messages = [
@@ -40,143 +48,232 @@ def render_chatbot(stats=None, ticker="el activo", comparison=None):
         with chat_container.chat_message("user"):
             st.markdown(prompt)
 
-        response = build_response(prompt, stats=stats, ticker=ticker, comparison=comparison, kb=kb)
+        context = build_analysis_context(stats=stats, ticker=ticker, comparison=comparison)
+        response = generate_response(prompt, context)
 
         st.session_state.messages.append({"role": "assistant", "content": response})
         with chat_container.chat_message("assistant"):
             st.markdown(response)
 
 
-def build_response(prompt, stats=None, ticker="el activo", comparison=None, kb=None):
-    """Construye respuestas acotadas a los datos historicos disponibles."""
-    p_low = prompt.lower()
-    kb = kb or {}
-
-    if comparison is not None:
-        comparative_response = build_comparison_response(p_low, comparison)
-        if comparative_response is not None:
-            return comparative_response
-
-    if stats is not None and any(
-        word in p_low for word in ["resultados", "fue", "analisis", "opinion", "desempeno", "desempeño"]
-    ):
-        retorno = stats["Return [%]"]
-        mercado = stats["Buy & Hold Return [%]"]
-        win_rate = stats["Win Rate [%]"]
-        profit_factor = stats["Profit Factor"]
-        dd = stats["Max. Drawdown [%]"]
-
-        res_ret = (
-            "supero a Buy & Hold"
-            if retorno > mercado
-            else "no supero a Buy & Hold"
-        )
-        res_win = (
-            "tuvo un porcentaje de acierto alto"
-            if win_rate > 50
-            else "tuvo un porcentaje de acierto bajo o moderado"
-        )
-        res_pf = (
-            "mostro buena relacion entre ganancias y perdidas"
-            if profit_factor > 1.5
-            else "tuvo una relacion ganancia/perdida ajustada o poco concluyente"
-        )
-        res_dd = (
-            "el drawdown fue relativamente controlado"
-            if abs(dd) < 15
-            else "el drawdown fue alto y debe revisarse con cuidado"
-        )
-
+def generate_response(prompt, context):
+    """Intenta responder con Gemini y usa fallback local si no esta disponible."""
+    fallback = build_fallback_response(prompt, context)
+    api_key = get_gemini_api_key()
+    if not api_key:
         return (
-            f"Segun los resultados historicos para **{ticker}**, la estrategia {res_ret} "
-            f"({retorno:.1f}% vs {mercado:.1f}%). Ademas, {res_win} "
-            f"(Win Rate: {win_rate:.1f}%), {res_pf} (Profit Factor: {profit_factor:.2f}) "
-            f"y {res_dd} (Max Drawdown: {dd:.1f}%). "
-            "Esto no garantiza resultados futuros y no debe interpretarse como recomendacion de inversion."
+            f"{fallback}\n\n"
+            "_Nota: Gemini no esta configurado. Agrega `GEMINI_API_KEY` en "
+            "`.streamlit/secrets.toml` para activar respuestas con LLM._"
         )
 
-    for key, value in kb.items():
-        if key in p_low:
-            return value
-
-    if any(word in p_low for word in ["hola", "buenos", "que tal"]):
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
         return (
-            f"Hola. Ejecuta el analisis de {ticker} y puedo ayudarte a interpretar "
-            "metricas o comparar estrategias."
+            f"{fallback}\n\n"
+            "_Nota: falta instalar `google-genai`. Ejecuta `pip install -r requirements.txt`._"
         )
 
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=build_user_prompt(prompt, context),
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.2,
+            ),
+        )
+    except Exception as error:
+        return (
+            f"{fallback}\n\n"
+            f"_Nota: no fue posible consultar Gemini ({error}). Se uso respuesta local._"
+        )
+
+    text = getattr(response, "text", None)
+    if not text:
+        return fallback
+
+    return text
+
+
+def get_gemini_api_key():
+    """Lee la API key sin guardarla en codigo."""
+    try:
+        secret_key = st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        secret_key = None
+
+    return secret_key or os.getenv("GEMINI_API_KEY")
+
+
+def build_user_prompt(prompt, context):
     return (
-        "Puedes preguntarme por Sharpe, drawdown, Profit Factor, Win Rate, "
-        "Buy & Hold o por la comparacion de estrategias."
+        "CONTEXTO_ANALISIS:\n"
+        f"{json.dumps(context, ensure_ascii=False, indent=2)}\n\n"
+        "PREGUNTA_USUARIO:\n"
+        f"{prompt}\n\n"
+        "Responde usando unicamente el CONTEXTO_ANALISIS."
     )
 
 
-def build_comparison_response(prompt, comparison):
+def build_analysis_context(stats=None, ticker="el activo", comparison=None):
+    """Construye un contexto pequeno y estructurado para Gemini."""
+    if comparison is not None:
+        return {
+            "mode": "strategy_comparison",
+            "ticker": ticker,
+            "comparison": comparison,
+            "allowed_conclusions": [
+                "comparar retorno historico",
+                "comparar drawdown historico",
+                "comparar Sharpe Ratio historico",
+                "comparar contra Buy & Hold",
+                "identificar estrategia mas equilibrada segun el score calculado",
+            ],
+            "disclaimer": "No es recomendacion de inversion y no garantiza resultados futuros.",
+        }
+
+    if stats is not None:
+        return {
+            "mode": "single_strategy",
+            "ticker": ticker,
+            "metrics": {
+                "return_pct": safe_stat(stats, "Return [%]"),
+                "buy_hold_return_pct": safe_stat(stats, "Buy & Hold Return [%]"),
+                "sharpe_ratio": safe_stat(stats, "Sharpe Ratio"),
+                "max_drawdown_pct": safe_stat(stats, "Max. Drawdown [%]"),
+                "win_rate_pct": safe_stat(stats, "Win Rate [%]"),
+                "profit_factor": safe_stat(stats, "Profit Factor"),
+                "trades": safe_stat(stats, "# Trades"),
+                "final_equity": safe_stat(stats, "Equity Final [$]"),
+            },
+            "disclaimer": "No es recomendacion de inversion y no garantiza resultados futuros.",
+        }
+
+    return {
+        "mode": "no_analysis",
+        "ticker": ticker,
+        "message": "Todavia no hay resultados calculados en la aplicacion.",
+    }
+
+
+def build_fallback_response(prompt, context):
+    """Respuesta local acotada cuando Gemini no esta disponible."""
+    p_low = prompt.lower()
+
+    if context["mode"] == "strategy_comparison":
+        return build_comparison_fallback(p_low, context["comparison"])
+
+    if context["mode"] == "single_strategy":
+        return build_single_strategy_fallback(p_low, context)
+
+    return "Ejecuta primero un analisis para que pueda interpretar resultados historicos."
+
+
+def build_single_strategy_fallback(prompt, context):
+    metrics = context["metrics"]
+
+    if any(word in prompt for word in ["resultado", "desempeno", "desempeño", "opinion", "analisis"]):
+        relation = (
+            "supero a Buy & Hold"
+            if metrics["return_pct"] > metrics["buy_hold_return_pct"]
+            else "no supero a Buy & Hold"
+        )
+        return (
+            f"Segun los resultados historicos, la estrategia {relation}: "
+            f"{metrics['return_pct']:.2f}% vs Buy & Hold {metrics['buy_hold_return_pct']:.2f}%. "
+            f"Sharpe: {metrics['sharpe_ratio']:.2f}, drawdown maximo: "
+            f"{metrics['max_drawdown_pct']:.2f}%, operaciones: {metrics['trades']:.0f}. "
+            "No garantiza resultados futuros."
+        )
+
+    if "sharpe" in prompt:
+        return (
+            f"Segun los resultados historicos, el Sharpe Ratio fue "
+            f"{metrics['sharpe_ratio']:.2f}. Este valor resume retorno ajustado por volatilidad."
+        )
+
+    if "drawdown" in prompt:
+        return (
+            f"En el periodo evaluado, el drawdown maximo fue "
+            f"{metrics['max_drawdown_pct']:.2f}%. Representa la peor caida historica de capital."
+        )
+
+    return (
+        "Puedo interpretar retorno, Sharpe Ratio, drawdown, Win Rate, Profit Factor "
+        "o comparar contra Buy & Hold usando los resultados historicos."
+    )
+
+
+def build_comparison_fallback(prompt, comparison):
     winners = comparison["winners"]
     rows = comparison["rows"]
     buy_hold = comparison["buy_hold"]
 
     if any(word in prompt for word in ["rentable", "mayor retorno", "mas retorno", "más retorno"]):
-        row = _find_row(rows, winners["highest_return"])
-        return _historical_response(
-            f"La estrategia mas rentable fue **{row['strategy']}**, con retorno de "
+        row = find_row(rows, winners["highest_return"])
+        return historical_response(
+            f"la estrategia mas rentable fue **{row['strategy']}**, con retorno de "
             f"{row['return_pct']:.2f}% y capital final de ${row['final_equity']:,.2f}."
         )
 
     if any(word in prompt for word in ["menos riesgosa", "menor riesgo", "menor drawdown", "menos riesgo"]):
-        row = _find_row(rows, winners["lowest_drawdown"])
-        return _historical_response(
-            f"La estrategia con menor drawdown fue **{row['strategy']}**, con drawdown maximo de "
+        row = find_row(rows, winners["lowest_drawdown"])
+        return historical_response(
+            f"la estrategia con menor drawdown fue **{row['strategy']}**, con "
             f"{row['max_drawdown_pct']:.2f}%."
         )
 
     if any(word in prompt for word in ["mejor sharpe", "rentabilidad/riesgo", "relacion", "riesgo"]):
-        row = _find_row(rows, winners["best_sharpe"])
-        return _historical_response(
-            f"La mejor relacion retorno/riesgo por Sharpe fue **{row['strategy']}**, "
+        row = find_row(rows, winners["best_sharpe"])
+        return historical_response(
+            f"la mejor relacion retorno/riesgo por Sharpe fue **{row['strategy']}**, "
             f"con Sharpe Ratio de {row['sharpe_ratio']:.2f}."
         )
 
     if any(word in prompt for word in ["equilibrada", "balanceada", "score"]):
-        row = _find_row(rows, winners["balanced"])
-        return _historical_response(
-            f"La estrategia mas equilibrada fue **{row['strategy']}**, usando el score "
-            f"Sharpe - abs(drawdown) * 0.5. Su score fue {row['balanced_score']:.2f}."
+        row = find_row(rows, winners["balanced"])
+        return historical_response(
+            f"la estrategia mas equilibrada fue **{row['strategy']}**, con score "
+            f"{row['balanced_score']:.2f}."
         )
 
     if "buy" in prompt or "hold" in prompt or "supero" in prompt or "superó" in prompt:
         beaters = [row["strategy"] for row in rows if row["beats_buy_hold"]]
         if beaters:
-            strategies = ", ".join(beaters)
-            return _historical_response(
-                f"Las estrategias que superaron a Buy & Hold fueron: **{strategies}**. "
+            return historical_response(
+                f"las estrategias que superaron a Buy & Hold fueron: **{', '.join(beaters)}**. "
                 f"Buy & Hold tuvo retorno de {buy_hold['return_pct']:.2f}%."
             )
 
-        return _historical_response(
-            f"Ninguna estrategia supero a Buy & Hold en retorno total. "
-            f"Buy & Hold tuvo retorno de {buy_hold['return_pct']:.2f}%."
+        return historical_response(
+            f"ninguna estrategia supero a Buy & Hold. Buy & Hold tuvo retorno de "
+            f"{buy_hold['return_pct']:.2f}%."
         )
 
-    if any(word in prompt for word in ["futuro", "considerar", "razonable"]):
-        row = _find_row(rows, winners["balanced"])
-        return _historical_response(
-            f"Para analisis futuro seria razonable estudiar **{row['strategy']}** porque fue la mas equilibrada "
-            "en el periodo evaluado. Esto es una hipotesis de analisis, no una recomendacion de inversion."
-        )
-
-    if any(word in prompt for word in ["comparacion", "comparar", "estrategia"]):
-        return _historical_response(
-            f"Mayor retorno: **{winners['highest_return']}**. "
-            f"Menor drawdown: **{winners['lowest_drawdown']}**. "
-            f"Mejor Sharpe: **{winners['best_sharpe']}**. "
-            f"Mas equilibrada: **{winners['balanced']}**."
-        )
-
-    return None
+    return historical_response(
+        f"mayor retorno: **{winners['highest_return']}**; menor drawdown: "
+        f"**{winners['lowest_drawdown']}**; mejor Sharpe: **{winners['best_sharpe']}**; "
+        f"mas equilibrada: **{winners['balanced']}**."
+    )
 
 
-def _find_row(rows, strategy_name):
+def safe_stat(stats, key, default=0.0):
+    try:
+        value = float(stats[key])
+    except Exception:
+        return default
+
+    if value != value or value in (float("inf"), float("-inf")):
+        return default
+
+    return value
+
+
+def find_row(rows, strategy_name):
     for row in rows:
         if row["strategy"] == strategy_name:
             return row
@@ -184,7 +281,7 @@ def _find_row(rows, strategy_name):
     return rows[0]
 
 
-def _historical_response(message):
+def historical_response(message):
     return (
         f"Segun los resultados historicos, {message} "
         "En el periodo evaluado esto no garantiza resultados futuros y debe interpretarse "
