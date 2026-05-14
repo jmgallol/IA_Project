@@ -409,3 +409,56 @@ def plot_trades(df, stats):
     )
     
     return fig
+
+
+def plot_trades_histogram(stats):
+    """
+    Histograma de ganancias y pérdidas de cada operación.
+    
+    Muestra la distribución de PnL (profit and loss) para visualizar
+    cuántas operaciones ganaron, cuántas perdieron y por cuánto.
+    
+    Args:
+        stats: Objeto de resultados del backtesting
+    
+    Returns:
+        plotly.graph_objects.Figure: Figura interactiva o None si no hay trades
+    """
+    trades = stats._trades
+    
+    if trades is None or len(trades) == 0:
+        return None
+    
+    pnl_values = trades['PnL'].values
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Histogram(
+        x=pnl_values,
+        nbinsx=15,
+        name='Operaciones',
+        marker=dict(color=COLORS['equity']),
+        hovertemplate='Rango PnL: $%{x}<br>Cantidad: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(
+        x=0,
+        line_dash='dash',
+        line_color='white',
+        annotation_text='Punto de quiebre',
+        annotation_position='top right'
+    )
+    
+    fig.update_layout(
+        title='Distribucion de Ganancias y Perdidas por Operacion',
+        xaxis_title='PnL (USD)',
+        yaxis_title='Cantidad de operaciones',
+        template='plotly_dark',
+        plot_bgcolor=COLORS['fondo_grafico'],
+        paper_bgcolor=COLORS['fondo_grafico'],
+        height=350,
+        showlegend=False,
+        hovermode='x unified'
+    )
+    
+    return fig

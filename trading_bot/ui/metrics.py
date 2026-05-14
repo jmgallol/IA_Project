@@ -308,3 +308,60 @@ def _format_params(params):
         return "N/A"
 
     return ", ".join(f"{key}={value}" for key, value in params.items())
+
+
+def render_executive_summary(stats, buy_hold_stats, strategy_name):
+    """
+    Muestra un resumen ejecutivo de 5 metricas clave en una fila.
+    
+    Perfecto para ver de un vistazo si la estrategia funciono bien.
+    
+    Args:
+        stats: Estadísticas del backtesting de la estrategia
+        buy_hold_stats: Estadísticas de Buy & Hold
+        strategy_name: Nombre de la estrategia evaluada
+    """
+    st.subheader('Resumen Ejecutivo')
+    
+    return_pct = stats["Return [%]"]
+    bh_return = buy_hold_stats["return_pct"]
+    outperformance = return_pct - bh_return
+    sharpe_ratio = stats["Sharpe Ratio"]
+    max_drawdown = stats["Max. Drawdown [%]"]
+    trades = int(stats["# Trades"])
+    final_equity = get_final_equity(stats)
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric(
+            "Retorno Total",
+            f"{return_pct:.1f}%",
+            delta=f"{outperformance:+.1f}% vs B&H" if outperformance != 0 else "Igual a B&H"
+        )
+    
+    with col2:
+        st.metric(
+            "Sharpe Ratio",
+            f"{sharpe_ratio:.2f}",
+            delta=f"{sharpe_ratio - buy_hold_stats['sharpe_ratio']:+.2f}" if buy_hold_stats.get('sharpe_ratio') else None
+        )
+    
+    with col3:
+        st.metric(
+            "Drawdown Maximo",
+            f"{max_drawdown:.1f}%",
+            delta=f"{max_drawdown - buy_hold_stats['max_drawdown_pct']:+.1f}%" if buy_hold_stats.get('max_drawdown_pct') else None
+        )
+    
+    with col4:
+        st.metric(
+            "Capital Final",
+            f"${final_equity:,.0f}"
+        )
+    
+    with col5:
+        st.metric(
+            "Operaciones Ejecutadas",
+            f"{trades}"
+        )

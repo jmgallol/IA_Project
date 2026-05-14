@@ -19,6 +19,7 @@ from ui.charts import (
     plot_equity_curve,
     plot_multi_strategy_comparison,
     plot_trades,
+    plot_trades_histogram,
 )
 from ui.metrics import (
     build_comparison_summary,
@@ -26,6 +27,7 @@ from ui.metrics import (
     render_best_params,
     render_buy_hold_comparison,
     render_comparison_guide,
+    render_executive_summary,
     render_metrics,
     render_optimization_results,
     render_strategy_comparison_table,
@@ -341,8 +343,14 @@ def render_results(
     """Renderiza las pestanas principales de resultados."""
     st.write(f"### {ticker} | {strategy_name}")
     st.write(f"Datos analizados: {len(data):,} registros")
-
+    
     stats_to_plot = optimized_stats if optimized_stats is not None else base_stats
+    
+    # Mostrar resumen ejecutivo antes de las tabs
+    if buy_hold_stats is not None:
+        render_executive_summary(stats_to_plot, buy_hold_stats, strategy_name)
+        st.divider()
+
     tab_data, tab_backtest, tab_buy_hold, tab_optimization = st.tabs(
         [
             "Datos e indicadores",
@@ -361,6 +369,10 @@ def render_results(
         render_metrics(base_stats, optimized_stats)
         st.plotly_chart(plot_equity_curve(stats_to_plot), use_container_width=True)
         st.plotly_chart(plot_trades(data, stats_to_plot), use_container_width=True)
+        
+        histogram = plot_trades_histogram(stats_to_plot)
+        if histogram is not None:
+            st.plotly_chart(histogram, use_container_width=True)
 
     with tab_buy_hold:
         if buy_hold_stats is None:
