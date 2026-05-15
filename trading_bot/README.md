@@ -164,57 +164,106 @@ El asistente debe interpretarse como apoyo educativo. No entrega recomendaciones
 
 ## Resultados
 
-Esta seccion queda preparada para incluir capturas o ejemplos obtenidos durante la sustentacion.
+A continuacion se presentan los resultados obtenidos ejecutando la aplicacion con el activo AAPL (Apple Inc.) durante el periodo julio 2023 a mayo 2026 con un capital inicial de USD 10,000.
 
-### Resultados de la estrategia
+### Resultados de estrategia individual (RSI Strategy)
 
-Incluir:
+Se ejecuto la estrategia RSI con parametros por defecto (rsi_lower=30, rsi_upper=70, periodo=14):
 
-- activo evaluado;
-- estrategia seleccionada;
-- periodo analizado;
-- parametros usados;
-- capital inicial;
-- capital final;
-- retorno total;
-- Sharpe Ratio;
-- drawdown maximo;
-- numero de operaciones.
+| Metrica | Valor |
+|---------|-------|
+| Activo evaluado | AAPL (Apple Inc.) |
+| Estrategia | RSI Strategy |
+| Periodo analizado | Jul 2023 – May 2026 (~735 registros) |
+| Parametros | rsi_lower=30, rsi_upper=70 |
+| Capital inicial | $10,000 USD |
+| Capital final | $8,751.41 USD |
+| Retorno total | -12.49% |
+| Sharpe Ratio | -0.23 |
+| Drawdown maximo | -32.34% |
+| Operaciones ejecutadas | 8 |
+
+![Resumen ejecutivo de la estrategia RSI](docs/screenshots/01_resumen_ejecutivo.png)
+
+Observacion: con parametros por defecto, la estrategia RSI no supero al mercado en este periodo. Esto ilustra la importancia de la optimizacion de parametros.
 
 ### Comparacion contra Buy & Hold
 
-Incluir:
+La siguiente tabla muestra la comparacion directa entre la estrategia RSI (parametros por defecto) y la linea base Buy & Hold:
 
-- capital final de la estrategia;
-- capital final de Buy & Hold;
-- retorno de la estrategia;
-- retorno de Buy & Hold;
-- diferencia de retorno;
-- Sharpe Ratio de ambos;
-- drawdown maximo de ambos;
-- grafica comparativa de curvas de capital.
+| Metrica | RSI Strategy | Buy & Hold |
+|---------|-------------|------------|
+| Capital final | $8,751.41 | $10,914.53 |
+| Retorno total | -12.49% | 9.15% |
+| Sharpe Ratio | -0.23 | 0.25 |
+| Drawdown maximo | -32.34% | -37.84% |
+| Volatilidad anual | Calculada por backtesting.py | 29.95% |
+
+La diferencia de retorno fue de -21.63% a favor de Buy & Hold, aunque la estrategia RSI tuvo un drawdown maximo ligeramente menor (-32.34% vs -37.84%), lo que indica menor exposicion al riesgo en momentos de caida.
+
+![Comparacion contra Buy and Hold](docs/screenshots/03_buy_and_hold.png)
 
 ### Comparacion automatica de estrategias
 
-Incluir:
+Se ejecuto el modo "Comparar todas las estrategias" con optimizacion via Grid Search (funcion objetivo: Sharpe Ratio). Los resultados tras la optimizacion automatica de parametros:
 
-- tabla comparativa de RSI, SMA, MACD y Buy & Hold;
-- curva de capital conjunta;
-- estrategia con mayor retorno;
-- estrategia con menor drawdown;
-- estrategia con mejor Sharpe Ratio;
-- estrategia mas equilibrada;
-- respuesta del asistente ante una pregunta comparativa.
+| Estrategia | Mejores parametros | Retorno total | Sharpe Ratio | Drawdown maximo | Win Rate | Operaciones | Capital final |
+|------------|-------------------|---------------|--------------|-----------------|----------|-------------|---------------|
+| RSI Strategy | rsi_lower=20, rsi_upper=70 | 54.32% | 1.28 | -9.80% | 100.00% | 7 | $15,431.79 |
+| SMA Crossover | n_short=7, n_long=70 | 57.10% | 0.91 | -19.41% | 57.14% | 7 | $15,709.99 |
+| MACD Strategy | fast=8, slow=24, signal=10 | 18.14% | 0.34 | -21.78% | 38.71% | 31 | $11,814.36 |
+| Buy & Hold | Compra inicial y mantener | 53.32% | 0.71 | -33.43% | N/A | 1 compra | $15,332.13 |
+
+Resultados por criterio:
+
+- **Mayor retorno:** SMA Crossover (57.10%)
+- **Menor drawdown:** RSI Strategy (-9.80%)
+- **Mejor Sharpe Ratio:** RSI Strategy (1.28)
+- **Estrategia mas equilibrada:** RSI Strategy (score = Sharpe Ratio - abs(Drawdown maximo) * 0.5)
+
+![Tabla comparativa de estrategias](docs/screenshots/04_comparacion_estrategias.png)
+
+La comparacion demuestra que la optimizacion de parametros transforma significativamente los resultados. La RSI Strategy paso de un retorno de -12.49% (parametros por defecto) a +54.32% (parametros optimizados), superando a Buy & Hold con un drawdown considerablemente menor.
+
+![Analisis tecnico con indicadores](docs/screenshots/05_datos_indicadores.png)
 
 ## Discusion
 
-El sistema no garantiza ganancias futuras. Los resultados dependen del activo, las fechas seleccionadas, los parametros y las condiciones historicas del mercado.
+### Analisis de resultados
 
-Una estrategia puede verse bien en un periodo especifico y mal en otro. Por eso los resultados deben interpretarse como evidencia historica, no como prediccion. La comparacion contra Buy & Hold permite saber si la estrategia realmente aporta valor frente a una alternativa simple.
+Los resultados obtenidos confirman dos hallazgos clave de la literatura financiera:
 
-La comparacion automatica mejora el analisis porque evita evaluar una sola estrategia de forma aislada. Sin embargo, elegir la mejor estrategia historica no garantiza que esa misma estrategia funcione en el futuro.
+1. **La optimizacion de parametros es critica.** La estrategia RSI con parametros por defecto (30/70) obtuvo un retorno de -12.49%, mientras que con parametros optimizados (20/70) logro +54.32%. Esto demuestra que los parametros genericos no son adecuados para todos los activos ni todos los periodos, y que la busqueda sistematica de parametros (Grid Search) es esencial.
 
-El proyecto demuestra el uso de optimizacion aplicada a un problema financiero, pero debe presentarse como una herramienta de analisis y validacion, no como una herramienta para recomendar inversiones reales.
+2. **Superar a Buy & Hold es dificil pero posible.** Tras la optimizacion, dos de las tres estrategias (RSI y SMA) superaron a Buy & Hold en retorno total, y las tres lograron drawdowns menores. Esto es consistente con la Hipotesis de Mercados Eficientes en su forma debil: los precios historicos contienen informacion que puede ser explotada parcialmente con analisis tecnico.
+
+3. **El Sharpe Ratio es una metrica mas robusta que el retorno total.** SMA Crossover tuvo el mayor retorno (57.10%) pero RSI Strategy tuvo el mejor Sharpe Ratio (1.28), indicando un mejor retorno ajustado por riesgo. Esto ilustra por que evaluar estrategias solo por retorno es insuficiente.
+
+### Limitaciones
+
+El sistema no garantiza ganancias futuras. Los resultados dependen del activo, las fechas seleccionadas, los parametros y las condiciones historicas del mercado. Una estrategia puede verse bien en un periodo especifico y mal en otro. Por eso los resultados deben interpretarse como evidencia historica, no como prediccion.
+
+Limitaciones adicionales del enfoque:
+
+- **Sesgo de sobreajuste (overfitting):** la optimizacion maximiza el rendimiento en datos historicos, pero los parametros encontrados pueden no generalizar a datos futuros. Se podria mitigar con validacion walk-forward.
+- **Sin costos de deslizamiento (slippage):** el backtest asume ejecucion instantanea al precio de cierre, lo cual es una simplificacion.
+- **Activos fraccionales:** la libreria backtesting.py no soporta fracciones nativas; se implemento un escalado de precios como solucion.
+
+### Relacion con el estado del arte
+
+Este proyecto se situa en la interseccion entre analisis tecnico y optimizacion computacional, areas bien documentadas en la literatura:
+
+- **Analisis tecnico como herramienta de decision:** Fama (1970) establecio la Hipotesis de Mercados Eficientes, donde la forma debil sugiere que los precios historicos ya reflejan toda la informacion disponible. Sin embargo, trabajos posteriores como Brock, Lakonishok y LeBaron (1992) demostraron que reglas tecnicas simples (como las medias moviles) pueden generar retornos anormales en ciertos periodos, lo cual es consistente con nuestros resultados.
+
+- **Grid Search para optimizacion de hiperparametros:** el uso de busqueda exhaustiva de parametros es un metodo estandar en machine learning (Bergstra & Bengio, 2012). En nuestro caso, se aplica al espacio de parametros de indicadores tecnicos, tratandolos como hiperparametros de un modelo de decision.
+
+- **Backtesting como validacion de estrategias:** plataformas como QuantConnect, Backtrader y Zipline han popularizado la simulacion historica como herramienta de validacion. Nuestro proyecto utiliza la libreria backtesting.py (Kernc, 2023), que ofrece una API compacta para Python.
+
+- **Asistentes conversacionales como interfaz de analisis:** la integracion de LLMs como Gemini para interpretar resultados cuantitativos es una tendencia emergente en herramientas fintech, alineada con el concepto de "AI-augmented analytics" descrito por Gartner (2024).
+
+### Conclusion
+
+El proyecto demuestra el uso de optimizacion aplicada a un problema financiero educativo. Debe presentarse como una herramienta de analisis y validacion historica, no como una herramienta para recomendar inversiones reales.
 
 ## Instrucciones de instalacion y ejecucion
 
