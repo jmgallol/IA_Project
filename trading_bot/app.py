@@ -1,279 +1,430 @@
-# ========================================
-# app.py
-# Punto de entrada principal — Interfaz Streamlit del Trading Bot
-# ========================================
+import logging
 
+# pyrefly: ignore [missing-import]
 import streamlit as st
-from datetime import datetime
+import numpy as np
 import pandas as pd
 
-# Importar módulos del proyecto
-from config.settings import (
-    RSI_PARAMS, 
-    SMA_PARAMS, 
-    MACD_PARAMS,
-    CAPITAL_INICIAL_DEFAULT,
-    COLORS
-)
-from data.loader import download_data, DataNotFoundError
+from backtest.engine import calculate_buy_hold, run_backtest
+from backtest.optimizer import run_optimization
+from config.settings import MACD_PARAMS, RSI_PARAMS, SMA_PARAMS
+from data.loader import DataNotFoundError, download_data
 from indicators.technical import add_indicators
+from strategies.macd_strategy import MACDStrategy
 from strategies.rsi_strategy import RSIStrategy
 from strategies.sma_strategy import SMAStrategy
-from strategies.macd_strategy import MACDStrategy
-from backtest.engine import run_backtest, get_readable_stats
-from backtest.optimizer import run_optimization
-from ui.sidebar import render_sidebar
-from ui.charts import plot_candlestick, plot_equity_curve, plot_trades
-from ui.metrics import render_metrics, render_best_params, render_optimization_results
-
-
-# ========== CONFIGURACIÓN DE PÁGINA ==========
-st.set_page_config(
-    layout="wide",
-    page_title="Trading Bot 📈",
-    page_icon="📈",
-    initial_sidebar_state="expanded"
+from ui.charts import (
+    plot_candlestick,
+    plot_equity_comparison,
+    plot_equity_curve,
+    plot_multi_strategy_comparison,
+    plot_trades,
+    plot_trades_histogram,
 )
+from ui.metrics import (
+    build_comparison_summary,
+    calculate_balanced_score,
+    render_best_params,
+    render_buy_hold_comparison,
+    render_comparison_guide,
+    render_executive_summary,
+    render_metrics,
+    render_optimization_results,
+    render_strategy_comparison_table,
+    render_strategy_winners,
+    safe_metric,
+)
+from ui.sidebar import render_sidebar
+from ui.chatbot import render_chatbot
 
-# Estilos personalizados
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #00D084;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .success-box {
-        background-color: rgba(0, 208, 132, 0.1);
-        border-left: 4px solid #00D084;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="main-header">📈 Trading Bot - Sistema Algorítmico</h1>', unsafe_allow_html=True)
+logger = logging.getLogger(__name__)
 
-# ========== CONTROL DE SESIÓN ==========
-# Guardar estados en session_state para mantener datos entre reruns
-if 'df_cargado' not in st.session_state:
-    st.session_state.df_cargado = None
-if 'stats_base' not in st.session_state:
-    st.session_state.stats_base = None
-if 'stats_opt' not in st.session_state:
-    st.session_state.stats_opt = None
-if 'best_params' not in st.session_state:
-    st.session_state.best_params = None
 
-# ========== PANEL LATERAL ==========
-config = render_sidebar()
+STRATEGIES = {
+    "RSI Strategy": {
+        "class": RSIStrategy,
+        "base_params": {"rsi_lower": 30, "rsi_upper": 70},
+        "param_grid": RSI_PARAMS,
+    },
+    "SMA Crossover": {
+        "class": SMAStrategy,
+        "base_params": {"n_short": 20, "n_long": 50},
+        "param_grid": SMA_PARAMS,
+    },
+    "MACD Strategy": {
+        "class": MACDStrategy,
+        "base_params": {"fast": 12, "slow": 26, "signal": 9},
+        "param_grid": MACD_PARAMS,
+    },
+}
 
-# ========== LÓGICA PRINCIPAL ==========
-if config['ejecutar']:
+
+@st.cache_data(show_spinner=False)
+def load_market_data(ticker, start_date, end_date):
+    """Descarga datos y calcula indicadores tecnicos."""
+    raw_data = download_data(ticker, start_date, end_date)
+    return add_indicators(raw_data)
+
+
+@st.cache_data(show_spinner=False)
+def load_demo_data(ticker, start_date, end_date):
+    """Genera una serie OHLCV deterministica para probar la app sin internet."""
+    dates = pd.date_range(start=start_date, end=end_date, freq="B")
+    if len(dates) < 80:
+        raise DataNotFoundError("El modo demostracion necesita al menos 80 dias habiles.")
+
+    seed = sum(ord(character) for character in ticker)
+    rng = np.random.default_rng(seed)
+    returns = rng.normal(loc=0.0006, scale=0.018, size=len(dates))
+    trend = np.linspace(0, 0.35, len(dates))
+    close = 100 * np.exp(np.cumsum(returns) + trend)
+    open_price = close * (1 + rng.normal(0, 0.004, len(dates)))
+    high = np.maximum(open_price, close) * (1 + rng.uniform(0.001, 0.018, len(dates)))
+    low = np.minimum(open_price, close) * (1 - rng.uniform(0.001, 0.018, len(dates)))
+    volume = rng.integers(800_000, 6_000_000, size=len(dates))
+
+    data = pd.DataFrame(
+        {
+            "Open": open_price,
+            "High": high,
+            "Low": low,
+            "Close": close,
+            "Volume": volume,
+        },
+        index=dates,
+    )
+    return add_indicators(data)
+
+
+def main():
+    st.set_page_config(layout="wide", page_title="Trading Bot")
+    st.title("Trading Bot - Backtesting y optimizacion")
+    st.caption("Sistema educativo para evaluar estrategias de trading con datos historicos.")
+
+    config = render_sidebar()
     
-    try:
-        # ===== PASO 1: Descargar datos =====
-        with st.spinner(f"📥 Descargando datos para {config['ticker']}..."):
-            df = download_data(
-                config['ticker'],
-                config['fecha_inicio'],
-                config['fecha_fin']
+    # El chatbot recibe las estadísticas guardadas en la sesión (si existen)
+    stats_for_bot = st.session_state.get("last_stats")
+    comparison_for_bot = st.session_state.get("last_comparison_summary")
+    render_chatbot(stats=stats_for_bot, ticker=config["ticker"], comparison=comparison_for_bot)
+
+    if not config["ejecutar"]:
+        last_results = st.session_state.get("last_results")
+        if last_results is not None:
+            st.info(
+                "Mostrando el ultimo analisis ejecutado. "
+                "Presiona 'Ejecutar analisis' para actualizarlo con la configuracion actual."
             )
-            st.session_state.df_cargado = df
-            st.success(f"✅ Datos descargados: {len(df)} días de operaciones")
-        
-        # ===== PASO 2: Calcular indicadores =====
-        with st.spinner("📊 Calculando indicadores técnicos..."):
-            df = add_indicators(df)
-            st.success("✅ Indicadores calculados correctamente")
-        
-        # ===== PASO 3: Seleccionar estrategia y parámetros =====
-        # Mapeo de estrategias
-        estrategias = {
-            "RSI Strategy": (RSIStrategy, RSI_PARAMS),
-            "SMA Crossover": (SMAStrategy, SMA_PARAMS),
-            "MACD Strategy": (MACDStrategy, MACD_PARAMS)
-        }
-        
-        strategy_class, param_grid = estrategias[config['estrategia']]
-        
-        # Parámetros por defecto
-        if config['estrategia'] == "RSI Strategy":
-            default_params = {'rsi_lower': 30, 'rsi_upper': 70}
-        elif config['estrategia'] == "SMA Crossover":
-            default_params = {'n_short': 20, 'n_long': 50}
-        else:  # MACD Strategy
-            default_params = {}
-        
-        # ===== PASO 4: Backtesting sin optimizar =====
-        with st.spinner("⏳ Ejecutando backtesting con parámetros por defecto..."):
-            stats_base = run_backtest(df, strategy_class, default_params, cash=config['capital'])
-            st.session_state.stats_base = stats_base
-            st.success("✅ Backtesting sin optimizar completado")
-        
-        # ===== PASO 5: Optimización (si está activada) =====
-        if config['optimizar']:
-            with st.spinner(f"🔍 Optimizando parámetros (esto puede tomar unos minutos)..."):
-                best_params, stats_opt, all_results = run_optimization(
-                    df, strategy_class, param_grid, cash=config['capital']
+            render_last_results(last_results)
+            return
+
+        st.info("Configura el activo, periodo y estrategia en el panel lateral para iniciar.")
+        return
+
+    if config["fecha_inicio"] >= config["fecha_fin"]:
+        st.error("La fecha inicial debe ser anterior a la fecha final.")
+        return
+
+    try:
+        with st.spinner("Descargando datos y calculando indicadores..."):
+            if config["modo_demo"]:
+                data = load_demo_data(
+                    config["ticker"],
+                    config["fecha_inicio"],
+                    config["fecha_fin"],
                 )
-                st.session_state.best_params = best_params
-                st.session_state.stats_opt = stats_opt
-                st.success("✅ Optimización completada")
-        
-        # ===== PASO 6: Mostrar resultados en tabs =====
-        tab1, tab2, tab3 = st.tabs(["📊 Datos y Gráfica", "📈 Backtesting", "🏆 Optimización"])
-        
-        # --- TAB 1: DATOS Y GRÁFICA ---
-        with tab1:
-            st.subheader("Información de Datos")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Ticker", config['ticker'])
-            with col2:
-                st.metric("Período", f"{config['fecha_inicio']} a {config['fecha_fin']}")
-            with col3:
-                st.metric("Candles", len(df))
-            with col4:
-                st.metric("Capital Inicial", f"${config['capital']:,.0f}")
-            
-            st.divider()
-            
-            # Mostrar gráfica de velas
-            st.subheader("Gráfico de Precio con Indicadores")
-            fig_candlestick = plot_candlestick(df)
-            st.plotly_chart(fig_candlestick, use_container_width=True)
-            
-            # Tabla de datos (últimas 10 filas)
-            with st.expander("📋 Ver últimas 20 filas de datos"):
-                display_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA_20', 'SMA_50', 'MACD', 'MACD_Signal']
-                available_cols = [col for col in display_cols if col in df.columns]
-                st.dataframe(df[available_cols].tail(20), use_container_width=True)
-        
-        # --- TAB 2: BACKTESTING ---
-        with tab2:
-            st.subheader(f"Resultados de Backtesting - {config['estrategia']}")
-            
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                st.write("### Parámetros Utilizados")
-                params_df = pd.DataFrame(
-                    [(k, v) for k, v in default_params.items()],
-                    columns=["Parámetro", "Valor"]
-                )
-                st.dataframe(params_df, use_container_width=True, hide_index=True)
-            
-            with col2:
-                st.write("### Estadísticas Clave")
-                st.metric("Retorno Total", f"{st.session_state.stats_base['Return [%]']:.2f}%")
-                st.metric("Sharpe Ratio", f"{st.session_state.stats_base['Sharpe Ratio']:.2f}")
-                st.metric("Drawdown Máximo", f"{st.session_state.stats_base['Max. Drawdown [%]']:.2f}%")
-            
-            st.divider()
-            
-            # Mostrar todas las métricas
-            render_metrics(st.session_state.stats_base)
-            
-            st.divider()
-            
-            # Gráficas
-            col1, col2 = st.columns([1, 1])
-            
-            with col1:
-                st.subheader("Curva de Capital")
-                fig_equity = plot_equity_curve(st.session_state.stats_base)
-                st.plotly_chart(fig_equity, use_container_width=True)
-            
-            with col2:
-                st.subheader("Puntos de Entrada y Salida")
-                fig_trades = plot_trades(df, st.session_state.stats_base)
-                st.plotly_chart(fig_trades, use_container_width=True)
-        
-        # --- TAB 3: OPTIMIZACIÓN ---
-        with tab3:
-            if config['optimizar']:
-                if st.session_state.best_params is not None:
-                    st.subheader("Resultados de Optimización")
-                    
-                    # Mostrar mejores parámetros
-                    render_best_params(st.session_state.best_params)
-                    
-                    st.divider()
-                    
-                    # Comparar resultados
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
-                        st.write("### Comparación de Resultados")
-                    with col2:
-                        col_metric1, col_metric2 = st.columns(2)
-                        with col_metric1:
-                            retorno_mejora = st.session_state.stats_opt['Return [%]'] - st.session_state.stats_base['Return [%]']
-                            st.metric(
-                                "Mejora en Retorno",
-                                f"{retorno_mejora:.2f}%",
-                                delta=f"{retorno_mejora:.2f}%" if retorno_mejora != 0 else None
-                            )
-                        with col_metric2:
-                            sharpe_mejora = st.session_state.stats_opt['Sharpe Ratio'] - st.session_state.stats_base['Sharpe Ratio']
-                            st.metric(
-                                "Mejora en Sharpe",
-                                f"{sharpe_mejora:.2f}",
-                                delta=f"{sharpe_mejora:.2f}" if sharpe_mejora != 0 else None
-                            )
-                    
-                    st.divider()
-                    
-                    # Mostrar métricas comparativas
-                    render_metrics(st.session_state.stats_base, st.session_state.stats_opt)
-                    
-                    st.divider()
-                    
-                    # Mostrar tabla de resultados de optimización
-                    if 'all_results' in locals():
-                        render_optimization_results(all_results)
-                else:
-                    st.warning("⚠️ No se completó la optimización. Intenta nuevamente.")
+                st.warning("Estas usando datos de demostracion, no precios reales de mercado.")
             else:
-                st.info("ℹ️ Activa la optimización automática en el panel lateral para ver estos resultados.")
-        
-        # ===== RESUMEN FINAL =====
+                data = load_market_data(
+                    config["ticker"],
+                    config["fecha_inicio"],
+                    config["fecha_fin"],
+                )
+
+        if data.empty:
+            st.error("No quedaron datos validos despues de calcular indicadores.")
+            return
+
+        if config["modo_analisis"] == "compare_all":
+            buy_hold_stats = calculate_buy_hold(data, cash=config["capital"])
+            strategy_results = compare_all_strategies(
+                data=data,
+                cash=config["capital"],
+                objective=config["objetivo"],
+            )
+            winners = identify_strategy_winners(strategy_results)
+            comparison_summary = build_comparison_summary(
+                strategy_results,
+                buy_hold_stats,
+                winners,
+            )
+            results_payload = {
+                "view": "comparison",
+                "data": data,
+                "ticker": config["ticker"],
+                "strategy_results": strategy_results,
+                "buy_hold_stats": buy_hold_stats,
+                "winners": winners,
+            }
+            st.session_state["last_results"] = results_payload
+            st.session_state["last_stats"] = None
+            st.session_state["last_comparison_summary"] = comparison_summary
+            render_last_results(results_payload)
+            return
+
+        strategy_config = STRATEGIES[config["estrategia"]]
+        strategy_class = strategy_config["class"]
+        base_params = strategy_config["base_params"]
+
+        with st.spinner("Ejecutando backtesting base..."):
+            base_stats = run_backtest(
+                data,
+                strategy_class,
+                base_params,
+                cash=config["capital"],
+            )
+
+        optimized_stats = None
+        best_params = None
+        optimization_results = []
+
+        if config["optimizar"]:
+            best_params, optimized_stats, optimization_results = optimize_strategy(
+                data,
+                strategy_class,
+                strategy_config["param_grid"],
+                cash=config["capital"],
+                objective=config["objetivo"],
+                label="Optimizando parametros",
+            )
+
+        buy_hold_stats = calculate_buy_hold(data, cash=config["capital"])
+
+        results_payload = {
+            "view": "single",
+            "data": data,
+            "ticker": config["ticker"],
+            "strategy_name": config["estrategia"],
+            "base_stats": base_stats,
+            "optimized_stats": optimized_stats,
+            "buy_hold_stats": buy_hold_stats,
+            "best_params": best_params,
+            "optimization_results": optimization_results,
+        }
+        st.session_state["last_results"] = results_payload
+        render_last_results(results_payload)
+
+        # Guardamos las estadísticas para que el chatbot las analice
+        st.session_state["last_stats"] = optimized_stats if optimized_stats is not None else base_stats
+        st.session_state["last_comparison_summary"] = None
+
+    except DataNotFoundError as error:
+        logger.warning("No fue posible cargar datos: %s", error)
+        show_user_error(str(error))
+    except ValueError as error:
+        logger.exception("Error de validacion durante el analisis")
+        show_user_error(str(error))
+    except Exception:
+        logger.exception("Error inesperado durante el analisis")
+        show_user_error(
+            "Ocurrio un error inesperado al ejecutar el analisis. "
+            "Revisa la terminal para ver el detalle tecnico."
+        )
+
+
+def show_user_error(message):
+    """Muestra errores limpios al usuario sin exponer trazas tecnicas."""
+    st.error(f"Error: {message}")
+
+
+def render_last_results(results_payload):
+    """Renderiza resultados guardados sin depender del boton de Streamlit."""
+    view = results_payload.get("view", "single")
+    payload = {key: value for key, value in results_payload.items() if key != "view"}
+    if view == "comparison":
+        render_comparison_results(**payload)
+        return
+
+    render_results(**payload)
+
+
+def compare_all_strategies(data, cash, objective):
+    """Optimiza y evalua todas las estrategias registradas."""
+    strategy_results = []
+    for strategy_name, strategy_config in STRATEGIES.items():
+        best_params, best_stats, optimization_results = optimize_strategy(
+            data,
+            strategy_config["class"],
+            strategy_config["param_grid"],
+            cash=cash,
+            objective=objective,
+            label=f"Optimizando {strategy_name}",
+        )
+        strategy_results.append(
+            {
+                "strategy": strategy_name,
+                "best_params": best_params,
+                "stats": best_stats,
+                "optimization_results": optimization_results,
+            }
+        )
+
+    return strategy_results
+
+
+def identify_strategy_winners(strategy_results):
+    """Identifica estrategias ganadoras por retorno, riesgo, Sharpe y balance."""
+    valid_results = [result for result in strategy_results if result.get("stats") is not None]
+    if not valid_results:
+        raise ValueError("No hay resultados validos para comparar estrategias.")
+
+    return {
+        "highest_return": max(
+            valid_results,
+            key=lambda result: safe_metric(result["stats"], "Return [%]"),
+        ),
+        "lowest_drawdown": min(
+            valid_results,
+            key=lambda result: abs(safe_metric(result["stats"], "Max. Drawdown [%]")),
+        ),
+        "best_sharpe": max(
+            valid_results,
+            key=lambda result: safe_metric(result["stats"], "Sharpe Ratio"),
+        ),
+        "balanced": max(
+            valid_results,
+            key=lambda result: calculate_balanced_score(result["stats"]),
+        ),
+    }
+
+
+def optimize_strategy(
+    data,
+    strategy_class,
+    param_grid,
+    cash,
+    objective,
+    label="Optimizando parametros",
+):
+    """Ejecuta grid search con una barra de progreso de Streamlit."""
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+
+    def update_progress(current, total, params):
+        progress_bar.progress(current / total)
+        progress_text.text(f"{label} {current}/{total}: {params}")
+
+    with st.spinner(f"{label}..."):
+        best_params, best_stats, optimization_results = run_optimization(
+            data,
+            strategy_class,
+            param_grid,
+            cash=cash,
+            progress_callback=update_progress,
+            objective=objective,
+        )
+
+    progress_bar.empty()
+    progress_text.empty()
+    return best_params, best_stats, optimization_results
+
+
+def render_results(
+    data,
+    ticker,
+    strategy_name,
+    base_stats,
+    optimized_stats=None,
+    buy_hold_stats=None,
+    best_params=None,
+    optimization_results=None,
+):
+    """Renderiza las pestanas principales de resultados."""
+    st.write(f"### {ticker} | {strategy_name}")
+    st.write(f"Datos analizados: {len(data):,} registros")
+    
+    stats_to_plot = optimized_stats if optimized_stats is not None else base_stats
+    
+    # Mostrar resumen ejecutivo antes de las tabs
+    if buy_hold_stats is not None:
+        render_executive_summary(stats_to_plot, buy_hold_stats, strategy_name)
         st.divider()
-        st.markdown("""
-            <div class="success-box">
-            <h3>✅ Análisis completado exitosamente</h3>
-            <p>Los resultados anteriores muestran el desempeño de tu estrategia en el período seleccionado.</p>
-            <p><b>Importante:</b> El backtesting es solo una simulación. El desempeño pasado no garantiza resultados futuros.</p>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    except DataNotFoundError as e:
-        st.error(f"❌ Error al cargar datos: {str(e)}")
-    except Exception as e:
-        st.error(f"❌ Error inesperado: {str(e)}")
-        st.info("Por favor, verifica que los parámetros sean válidos e intenta nuevamente.")
 
-else:
-    # Mostrar pantalla de bienvenida si no se ejecuta análisis
-    st.info("👈 Configura los parámetros en el panel lateral y haz clic en '🚀 Ejecutar análisis' para comenzar.")
-    
-    with st.expander("📚 ¿Cómo usar este Bot?"):
-        st.markdown("""
-        1. **Selecciona un activo** - Elige de la lista o ingresa un ticker personalizado
-        2. **Define el período** - Selecciona las fechas de inicio y fin
-        3. **Elige la estrategia** - RSI, SMA Crossover o MACD
-        4. **Configura el capital** - Define tu capital inicial simulado
-        5. **Optimiza (opcional)** - Activa para encontrar los mejores parámetros automáticamente
-        6. **Ejecuta el análisis** - Haz clic en el botón para ver los resultados
+    tab_data, tab_backtest, tab_buy_hold, tab_optimization = st.tabs(
+        [
+            "Datos e indicadores",
+            "Backtesting",
+            "Buy & Hold",
+            "Optimizacion",
+        ]
+    )
+
+    with tab_data:
+        st.plotly_chart(plot_candlestick(data), use_container_width=True)
+        st.write("Ultimos registros con indicadores")
+        st.dataframe(data.tail(10), use_container_width=True)
+
+    with tab_backtest:
+        render_metrics(base_stats, optimized_stats)
+        st.plotly_chart(plot_equity_curve(stats_to_plot), use_container_width=True)
+        st.plotly_chart(plot_trades(data, stats_to_plot), use_container_width=True)
         
-        ### Estrategias disponibles:
-        - **RSI Strategy**: Compra en sobreventa (RSI < 30), vende en sobrecompra (RSI > 70)
-        - **SMA Crossover**: Compra en cruce alcista de medias móviles, vende en cruce bajista
-        - **MACD Strategy**: Compra cuando MACD cruza hacia arriba la línea de señal
-        """)
+        histogram = plot_trades_histogram(stats_to_plot)
+        if histogram is not None:
+            st.plotly_chart(histogram, use_container_width=True)
+
+    with tab_buy_hold:
+        if buy_hold_stats is None:
+            st.info("No hay datos de Buy & Hold para mostrar.")
+        else:
+            render_buy_hold_comparison(stats_to_plot, buy_hold_stats)
+            st.plotly_chart(
+                plot_equity_comparison(stats_to_plot, buy_hold_stats),
+                use_container_width=True,
+            )
+
+    with tab_optimization:
+        if optimized_stats is None or best_params is None:
+            st.info("Activa la optimizacion para ver los mejores parametros.")
+            return
+
+        render_best_params(best_params)
+        render_optimization_results(optimization_results or [])
 
 
+def render_comparison_results(data, ticker, strategy_results, buy_hold_stats, winners):
+    """Renderiza el modo de comparacion automatica de estrategias."""
+    st.write(f"### {ticker} | Comparacion automatica de estrategias")
+    st.write(f"Datos analizados: {len(data):,} registros")
+
+    tab_comparison, tab_chart, tab_data, tab_guide = st.tabs(
+        [
+            "Comparacion",
+            "Curvas de capital",
+            "Datos e indicadores",
+            "Como interpretar",
+        ]
+    )
+
+    with tab_comparison:
+        render_strategy_winners(winners)
+        render_strategy_comparison_table(strategy_results, buy_hold_stats)
+
+    with tab_chart:
+        st.plotly_chart(
+            plot_multi_strategy_comparison(strategy_results, buy_hold_stats),
+            use_container_width=True,
+        )
+
+    with tab_data:
+        st.plotly_chart(plot_candlestick(data), use_container_width=True)
+        st.write("Ultimos registros con indicadores")
+        st.dataframe(data.tail(10), use_container_width=True)
+
+    with tab_guide:
+        render_comparison_guide()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,56 @@
+================================================================================
+GUÍA COMPLETA DE INSTALACIÓN Y EJECUCIÓN - TRADING BOT IA
+================================================================================
+
+📋 PRERREQUISITOS:
+- Windows 10/11
+- Python 3.11 instalado (Recomendado)
+
+🚀 PASOS DE INSTALACIÓN (PARA EL EQUIPO):
+
+1. Abre Command Prompt (CMD) o PowerShell en la carpeta del proyecto.
+
+2. Activa el entorno virtual (ya configurado):
+   .\env\Scripts\activate
+   
+   (Deberías ver "(env)" al inicio de la línea de comandos).
+
+3. Instala las dependencias necesarias:
+   pip install -r requirements.txt
+
+4. Ejecuta la aplicación:
+   streamlit run app.py
+
+   (Se abrirá en tu navegador: http://localhost:8501)
+
+================================================================================
+🤖 CÓMO MOSTRAR EL BOT DE APOYO (PUNTO EXTRA +5%):
+El sistema incluye un analista de IA en la barra lateral. Úsalo en la demo así:
+1. Ejecuta cualquier análisis primero.
+2. Pregúntale al bot: "¿Cómo fue mi desempeño?" o "¿Qué opinas de los resultados?".
+3. El bot analizará el Sharpe Ratio, Win Rate y Profit Factor automáticamente.
+4. También puedes preguntarle: "¿Qué es el Drawdown?" o "¿Qué estrategia es mejor?".
+================================================================================
+
+✅ VERIFICACIÓN:
+Si todo está correcto, deberías ver:
+- El panel de configuración a la izquierda.
+- El Chatbot de Apoyo abajo en la barra lateral.
+- Gráficos interactivos al presionar "Ejecutar análisis".
+
+⚠️ POSIBLES PROBLEMAS:
+- "Python no es reconocido": Asegúrate de haber activado el entorno con '.\env\Scripts\activate'.
+- "Error al descargar datos": Revisa tu conexión a internet o prueba el "Modo Demostración".
+- "No se encuentra el módulo ui.chatbot": Verifica que estás dentro de la carpeta 'trading_bot' al ejecutar Streamlit.
+
+🔍 ESTRUCTURA DEL PROYECTO:
+trading_bot/
+├── app.py                          ← Punto de entrada (Interfaz)
+├── backtest/                       ← Motor de simulación y optimización
+├── strategies/                     ← Lógica de las 3 estrategias de IA
+├── ui/                             ← Componentes visuales y CHATBOT
+├── data/                           ← Descarga de datos históricos
+├── indicators/                     ← Cálculos técnicos (RSI, MACD, etc.)
+├── env/                            ← Entorno virtual de Python 3.11
+└── requirements.txt                ← Librerías necesarias
+

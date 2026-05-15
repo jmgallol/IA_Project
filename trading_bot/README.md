@@ -381,7 +381,3 @@ trading_bot/
 4. Revisar la pestana `Comparacion`.
 5. Revisar la grafica `Curvas de capital`.
 6. Preguntar al asistente: `Cual estrategia fue mas rentable?` o `Cual fue mas equilibrada?`.
-
-4. Revisar la pestana `Comparacion`.
-5. Revisar la grafica `Curvas de capital`.
-6. Preguntar al asistente: `Cual estrategia fue mas rentable?` o `Cual fue mas equilibrada?`.

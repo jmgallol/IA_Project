@@ -171,8 +171,9 @@ def plot_equity_curve(stats):
         plotly.graph_objects.Figure: Figura interactiva
     """
     
-    # Obtener la serie de capital durante el tiempo
-    equity = stats._equity_curve
+    # Obtener la serie de capital durante el tiempo.
+    equity_curve = stats._equity_curve
+    equity = equity_curve["Equity"] if "Equity" in equity_curve.columns else equity_curve.iloc[:, 0]
     
     # Determinar color según el retorno final
     retorno_total = stats['Return [%]']
@@ -184,7 +185,7 @@ def plot_equity_curve(stats):
     fig.add_trace(
         go.Scatter(
             x=equity.index,
-            y=equity.values,
+            y=equity,
             fill='tozeroy',
             fillcolor=color_relleno,
             line=dict(color=COLORS['equity'], width=2),
@@ -205,6 +206,102 @@ def plot_equity_curve(stats):
     )
     
     return fig
+
+
+def plot_equity_comparison(strategy_stats, buy_hold_stats, title="Estrategia vs Buy & Hold"):
+    """Compara la curva de capital de la estrategia contra Buy & Hold."""
+    strategy_equity_curve = strategy_stats._equity_curve
+    strategy_equity = (
+        strategy_equity_curve["Equity"]
+        if "Equity" in strategy_equity_curve.columns
+        else strategy_equity_curve.iloc[:, 0]
+    )
+    buy_hold_equity = buy_hold_stats["equity_curve"]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=strategy_equity.index,
+            y=strategy_equity,
+            mode="lines",
+            name="Estrategia",
+            line=dict(color=COLORS["equity"], width=3),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Estrategia: $%{y:,.2f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=buy_hold_equity.index,
+            y=buy_hold_equity,
+            mode="lines",
+            name="Buy & Hold",
+            line=dict(color=COLORS["sma_corta"], width=3, dash="dash"),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Buy & Hold: $%{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Fecha",
+        yaxis_title="Capital (USD)",
+        template="plotly_dark",
+        plot_bgcolor=COLORS["fondo_grafico"],
+        paper_bgcolor=COLORS["fondo_grafico"],
+        height=430,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def plot_multi_strategy_comparison(strategy_results, buy_hold_stats):
+    """Compara curvas de capital de varias estrategias optimizadas y Buy & Hold."""
+    line_colors = ["#1F77B4", "#00D084", "#AB47BC", "#FF9800", "#F44336"]
+    fig = go.Figure()
+
+    for index, result in enumerate(strategy_results):
+        equity = _extract_equity(result["stats"])
+        fig.add_trace(
+            go.Scatter(
+                x=equity.index,
+                y=equity,
+                mode="lines",
+                name=result["strategy"],
+                line=dict(color=line_colors[index % len(line_colors)], width=3),
+                hovertemplate=(
+                    f"<b>{result['strategy']}</b><br>"
+                    "%{x|%Y-%m-%d}<br>Capital: $%{y:,.2f}<extra></extra>"
+                ),
+            )
+        )
+
+    buy_hold_equity = buy_hold_stats["equity_curve"]
+    fig.add_trace(
+        go.Scatter(
+            x=buy_hold_equity.index,
+            y=buy_hold_equity,
+            mode="lines",
+            name="Buy & Hold",
+            line=dict(color="#FFFFFF", width=3, dash="dash"),
+            hovertemplate="<b>Buy & Hold</b><br>%{x|%Y-%m-%d}<br>Capital: $%{y:,.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title="Comparacion de curvas de capital",
+        xaxis_title="Fecha",
+        yaxis_title="Capital (USD)",
+        template="plotly_dark",
+        plot_bgcolor=COLORS["fondo_grafico"],
+        paper_bgcolor=COLORS["fondo_grafico"],
+        height=500,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def _extract_equity(stats):
+    equity_curve = stats._equity_curve
+    return equity_curve["Equity"] if "Equity" in equity_curve.columns else equity_curve.iloc[:, 0]
 
 
 def plot_trades(df, stats):
@@ -235,6 +332,9 @@ def plot_trades(df, stats):
         )
     )
     
+    price_scale = stats.attrs.get("price_scale", 1.0)
+    price_multiplier = 1 / price_scale if price_scale else 1.0
+
     # Extraer puntos de entrada y salida de las operaciones
     trades = stats._trades
     
@@ -247,15 +347,19 @@ def plot_trades(df, stats):
         exit_times = []
         exit_prices = []
         
-        for trade in trades:
-            # Entry
-            entry_times.append(df.index[int(trade.entry_time)])
-            entry_prices.append(trade.entry_price)
-            
-            # Exit
-            if trade.exit_time is not None:
-                exit_times.append(df.index[int(trade.exit_time)])
-                exit_prices.append(trade.exit_price)
+        for _, trade in trades.iterrows():
+            entry_bar = int(trade["EntryBar"])
+            exit_bar = trade["ExitBar"]
+
+            if 0 <= entry_bar < len(df):
+                entry_times.append(df.index[entry_bar])
+                entry_prices.append(trade["EntryPrice"] * price_multiplier)
+
+            if pd.notna(exit_bar):
+                exit_bar = int(exit_bar)
+                if 0 <= exit_bar < len(df):
+                    exit_times.append(df.index[exit_bar])
+                    exit_prices.append(trade["ExitPrice"] * price_multiplier)
         
         # Agregar marcadores de entrada
         if entry_times:
@@ -301,6 +405,59 @@ def plot_trades(df, stats):
         plot_bgcolor=COLORS['fondo_grafico'],
         paper_bgcolor=COLORS['fondo_grafico'],
         height=400,
+        hovermode='x unified'
+    )
+    
+    return fig
+
+
+def plot_trades_histogram(stats):
+    """
+    Histograma de ganancias y pérdidas de cada operación.
+    
+    Muestra la distribución de PnL (profit and loss) para visualizar
+    cuántas operaciones ganaron, cuántas perdieron y por cuánto.
+    
+    Args:
+        stats: Objeto de resultados del backtesting
+    
+    Returns:
+        plotly.graph_objects.Figure: Figura interactiva o None si no hay trades
+    """
+    trades = stats._trades
+    
+    if trades is None or len(trades) == 0:
+        return None
+    
+    pnl_values = trades['PnL'].values
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Histogram(
+        x=pnl_values,
+        nbinsx=15,
+        name='Operaciones',
+        marker=dict(color=COLORS['equity']),
+        hovertemplate='Rango PnL: $%{x}<br>Cantidad: %{y}<extra></extra>'
+    ))
+    
+    fig.add_vline(
+        x=0,
+        line_dash='dash',
+        line_color='white',
+        annotation_text='Punto de quiebre',
+        annotation_position='top right'
+    )
+    
+    fig.update_layout(
+        title='Distribucion de Ganancias y Perdidas por Operacion',
+        xaxis_title='PnL (USD)',
+        yaxis_title='Cantidad de operaciones',
+        template='plotly_dark',
+        plot_bgcolor=COLORS['fondo_grafico'],
+        paper_bgcolor=COLORS['fondo_grafico'],
+        height=350,
+        showlegend=False,
         hovermode='x unified'
     )
     

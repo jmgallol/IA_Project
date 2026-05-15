@@ -1,4 +1,1 @@
-# ========================================
-# ui/__init__.py
-# Paquete de interfaz de usuario
-# ========================================
+# Este archivo permite que Python reconozca esta carpeta como un paquete.
